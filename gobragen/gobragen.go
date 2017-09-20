@@ -40,14 +40,14 @@ func Generate(cmd *cobra.Command) *gobra.Command {
 		Children: make([]*gobra.Command, len(children)),
 	}
 	cmd.PersistentFlags().VisitAll(func(arg1 *pflag.Flag) {
-		c.PersistentFlags = append(c.PersistentFlags, gobra.Flag{
+		c.Flags = append(c.Flags, gobra.Flag{
 			Name:  arg1.Name,
 			Use:   arg1.Usage,
 			Value: arg1.Value.String(),
 		})
 	})
 	cmd.LocalNonPersistentFlags().VisitAll(func(arg1 *pflag.Flag) {
-		c.LocalFlags = append(c.LocalFlags, gobra.Flag{
+		c.Flags = append(c.Flags, gobra.Flag{
 			Name:  arg1.Name,
 			Use:   arg1.Usage,
 			Value: arg1.Value.String(),

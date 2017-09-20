@@ -44,37 +44,24 @@ type Command struct {
 	// Use is the documentation for the command.
 	Doc string
 
-	// PersistentFlags are persistent flags for the command.
-	PersistentFlags []Flag
-
-	// LocalFlags are local flags for the command.
-	LocalFlags []Flag
+	// Flags flags for the command.
+	Flags []Flag
 
 	// Children are subcommands of this command.
 	Children []*Command
 
 	ParentElement dom.Element
 	view.DefaultView
+	listener *view.EventListener
 }
 
-// Flag holds informaation about a flag for a command.
-type Flag struct {
-	// Name is the name of the argument.
-	Name string
-
-	// Use is usage information.
-	Use string
-
-	// Value is the argument value.
-	Value string
-}
-
-var t *template.Template
+var tCmd, tFlag *template.Template
 
 func init() {
-	const tpl = `
+	const commandTpl = `
   <div>
   <h3>{{.Name}}</h3>
+  <div>{{range .Flags}}<p>{{.Name}} {{.Value}}</p>{{end}}</div>
   {{if .Children}}<select id="{{.Name}}select">
     <option value="" disabled selected>Select</option>
     {{range .Children}}<option>{{ .Name }}</option>{{end}}
@@ -82,7 +69,7 @@ func init() {
   </div>`
 
 	var err error
-	t, err = template.New("cmd").Parse(tpl)
+	tCmd, err = template.New("cmd").Parse(commandTpl)
 	if err != nil {
 		panic(err)
 	}
@@ -91,12 +78,15 @@ func init() {
 // Render renders the view of the command.
 func (c *Command) Render() error {
 	b := new(bytes.Buffer)
-	if err := t.Execute(b, c); err != nil {
+	if err := tCmd.Execute(b, c); err != nil {
 		return err
 	}
 	c.Element().SetInnerHTML(b.String())
 	view.AppendToEl(c.ParentElement, c)
-	view.AddEventListener(c, "input", fmt.Sprintf("#%sselect", c.Name), c.renderChild)
+	if c.listener != nil {
+		c.listener.Remove()
+	}
+	c.listener = view.AddEventListener(c, "input", fmt.Sprintf("#%sselect", c.Name), c.renderChild)
 	return nil
 }
 
@@ -111,4 +101,16 @@ func (c *Command) renderChild(ev dom.Event) {
 			view.Remove(child)
 		}
 	}
+}
+
+// Flag holds informaation about a flag for a command.
+type Flag struct {
+	// Name is the name of the argument.
+	Name string
+
+	// Use is usage information.
+	Use string
+
+	// Value is the argument value.
+	Value string
 }

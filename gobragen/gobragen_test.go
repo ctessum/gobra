@@ -59,10 +59,8 @@ func TestGenerate(t *testing.T) {
 	want := &gobra.Command{
 		Name: "Root",
 		Doc:  "Documentation for the root command.",
-		PersistentFlags: []gobra.Flag{
+		Flags: []gobra.Flag{
 			gobra.Flag{Name: "=", Use: "the answer", Value: "42"},
-		},
-		LocalFlags: []gobra.Flag{
 			gobra.Flag{Name: "abc", Use: "you and me", Value: "123"},
 		},
 		Children: []*gobra.Command{
@@ -73,7 +71,7 @@ func TestGenerate(t *testing.T) {
 					&gobra.Command{
 						Name: "subsub1",
 						Doc:  "subsub1 documentation",
-						LocalFlags: []gobra.Flag{
+						Flags: []gobra.Flag{
 							gobra.Flag{Name: "sub", Use: "1", Value: "sub"},
 						},
 					},

@@ -34,9 +34,21 @@ func main() {
 	cmd := &gobra.Command{
 		Name:          "Command1",
 		ParentElement: d.GetElementByID("container"),
+		Flags: []gobra.Flag{
+			{
+				Name:  "persistentf1",
+				Value: "persistentf1 value",
+			},
+		},
 		Children: []*gobra.Command{
 			{
 				Name: "Command11",
+				Flags: []gobra.Flag{
+					{
+						Name:  "f11",
+						Value: "f11 value",
+					},
+				},
 				Children: []*gobra.Command{
 					{
 						Name: "Command111",
