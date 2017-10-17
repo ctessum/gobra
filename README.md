@@ -7,7 +7,7 @@ Gobra generates an HTML snippet.
 
 ```go
 import (
-	"[thisrepo]"
+	"github.com/ctessum/gobra"
 	"html/template"
 )
 

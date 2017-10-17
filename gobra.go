@@ -33,7 +33,7 @@ import (
 
 // Command holds information about a cobra command
 type Command struct {
-	// is the command toplevel or not
+	// TopLevel specificies whether the command is a top-level one or not.
 	TopLevel bool 
 
 	// Name is the name of the command
@@ -92,9 +92,8 @@ func init() {
 	document.querySelectorAll("[data-gobra-select]").forEach( option => {
 		option.onchange = e => {
 			[...e.target.parentElement.children].forEach( el => {
-				if (el.tagName !== "DIV")
-					return;
-				el.style.display = (el.dataset.gobraName == e.target.value)? "" : "none";
+				if (el.tagName == "DIV")
+					el.style.display = (el.dataset.gobraName == e.target.value)? "" : "none";
 			})
 		}
 	})
@@ -106,12 +105,12 @@ func init() {
 }
 
 // Render renders the view of the command.
-func (c *Command) Render() (string, error) {
+func (c *Command) Render() ([]byte, error) {
 	b := new(bytes.Buffer)
 	if err := tCmd.Execute(b, c); err != nil {
-		return "", err
+		return b.Bytes(), err
 	}
 	
-	return b.String(), nil
+	return b.Bytes(), nil
 }
 
