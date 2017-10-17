@@ -25,43 +25,80 @@ SOFTWARE.
 package main
 
 import (
+	"os" // for now
 	"github.com/ctessum/gobra"
-	"honnef.co/go/js/dom"
+	"html/template"
 )
 
 func main() {
-	d := dom.GetWindow().Document()
+	const tmpl = `
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8">
+	<title>Some page</title>
+	<style>
+		html, body {padding: 0; margin: 2% 0; font-family: sans-serif;}
+		.container { max-width: 700px; margin: 0 auto; padding: 10px; }
+	</style>
+</head>
+<body>
+	<div class="container">
+		<h1>Some valid HTML page here</h1>
+		<span>Below is a div where Gobra is added.</span>
+		<div>
+			{{.}}
+		</div>
+	</div>
+</body>
+</html>
+`
+	output := template.Must(template.New("outputPage").Parse(tmpl))
+
 	cmd := &gobra.Command{
-		Name:          "Command1",
-		ParentElement: d.GetElementByID("container"),
+		TopLevel: true,
+		Name:          "go",
 		Flags: []gobra.Flag{
 			{
-				Name:  "persistentf1",
-				Value: "persistentf1 value",
+				Name:  "param",
+				Value: "value",
+			},
+			{
+				Name: "descr",
+				Value: "testi test",
+				Use: "Flag used for description",
 			},
 		},
 		Children: []*gobra.Command{
 			{
-				Name: "Command11",
+				Name: "run",
 				Flags: []gobra.Flag{
 					{
-						Name:  "f11",
-						Value: "f11 value",
+						Name:  "background",
+						Value: "true",
 					},
 				},
 				Children: []*gobra.Command{
 					{
-						Name: "Command111",
+						Name: "example.go",
 					},
 					{
-						Name: "Command112",
+						Name: "somefile.go",
 					},
 				},
 			},
 			{
-				Name: "Command12",
+				Name: "test",
 			},
 		},
 	}
-	cmd.Render()
+
+	val, err := cmd.Render();
+	if err != nil {
+		panic(err)
+	}
+
+	f, err := os.Create("index.html")
+
+	output.Execute(f, template.HTML(val))
 }

@@ -1,19 +1,110 @@
-<!doctype html>
 
-<html lang="en">
+<!DOCTYPE html>
+<html>
 <head>
-  <meta charset="utf-8">
-
-  <title>gobra example</title>
-  <meta name="description" content="example">
-
-  <!--[if lt IE 9]>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5shiv/3.7.3/html5shiv.js"></script>
-  <![endif]-->
+	<meta charset="utf-8">
+	<title>Some page</title>
+	<style>
+		html, body {padding: 0; margin: 2% 0; font-family: sans-serif;}
+		.container { max-width: 700px; margin: 0 auto; padding: 10px; }
+	</style>
 </head>
-
 <body>
-  <div id="container"></div>
+	<div class="container">
+		<h1>Some valid HTML page here</h1>
+		<span>Below is a div where Gobra is added.</span>
+		<div>
+			
+<div>
+
+
+	<div data-gobra-name=go style="">
+		<h3>go</h3>
+		<ul>
+			
+				<li><code>--param="value"</code> </li>
+			
+				<li><code>--descr="testi test"</code> Flag used for description</li>
+			
+		</ul>
+		
+			<select data-gobra-select>
+				<option selected disabled>Select</option>
+				
+				<option value="run">run</option>
+				
+				<option value="test">test</option>
+				
+			</select>
+			
+				
+	<div data-gobra-name=run style="display:none; ">
+		<h3>run</h3>
+		<ul>
+			
+				<li><code>--background="true"</code> </li>
+			
+		</ul>
+		
+			<select data-gobra-select>
+				<option selected disabled>Select</option>
+				
+				<option value="example.go">example.go</option>
+				
+				<option value="somefile.go">somefile.go</option>
+				
+			</select>
+			
+				
+	<div data-gobra-name=example.go style="display:none; ">
+		<h3>example.go</h3>
+		<ul>
+			
+		</ul>
+		
+	</div>
+
+			
+				
+	<div data-gobra-name=somefile.go style="display:none; ">
+		<h3>somefile.go</h3>
+		<ul>
+			
+		</ul>
+		
+	</div>
+
+			
+		
+	</div>
+
+			
+				
+	<div data-gobra-name=test style="display:none; ">
+		<h3>test</h3>
+		<ul>
+			
+		</ul>
+		
+	</div>
+
+			
+		
+	</div>
+
+<script>
+	document.querySelectorAll("[data-gobra-select]").forEach( option => {
+		option.onchange = e => {
+			[...e.target.parentElement.children].forEach( el => {
+				if (el.tagName == "DIV")
+					el.style.display = (el.dataset.gobraName == e.target.value)? "" : "none";
+			})
+		}
+	})
+</script>
+</div>
+
+		</div>
+	</div>
 </body>
-  <script src="example.js"></script>
 </html>
