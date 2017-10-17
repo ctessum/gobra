@@ -45,7 +45,7 @@ func main() {
 <body>
 	<div class="container">
 		<h1>Some valid HTML page here</h1>
-		<span>Below is a div where you Gobra is added.</span>
+		<span>Below is a div where Gobra is added.</span>
 		<div>
 			{{.}}
 		</div>
