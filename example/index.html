@@ -18,13 +18,12 @@
 <div>
 
 
-	<div data-gobra-name=go style="">
-		<h3>go</h3>
+	<div data-gobra-name=dummy style="">
+		<h3>dummy</h3>
 		<ul>
 			
-				<li><code>--param="value"</code> </li>
+				<li><code>--config="./conf.toml"</code> configuration file location </li>
 			
-				<li><code>--descr="testi test"</code> Flag used for description</li>
 			
 		</ul>
 		
@@ -33,7 +32,7 @@
 				
 				<option value="run">run</option>
 				
-				<option value="test">test</option>
+				<option value="version">version</option>
 				
 			</select>
 			
@@ -42,33 +41,27 @@
 		<h3>run</h3>
 		<ul>
 			
-				<li><code>--background="true"</code> </li>
+				<li><code>--inBackground="false"</code> Program will run in background if sent true </li>
+			
 			
 		</ul>
 		
 			<select data-gobra-select>
 				<option selected disabled>Select</option>
 				
-				<option value="example.go">example.go</option>
-				
-				<option value="somefile.go">somefile.go</option>
+				<option value="steady">steady</option>
 				
 			</select>
 			
 				
-	<div data-gobra-name=example.go style="display:none; ">
-		<h3>example.go</h3>
+	<div data-gobra-name=steady style="display:none; ">
+		<h3>steady</h3>
 		<ul>
 			
-		</ul>
-		
-	</div>
-
 			
-				
-	<div data-gobra-name=somefile.go style="display:none; ">
-		<h3>somefile.go</h3>
-		<ul>
+				<li><code>--begin="0"</code> Beginning row index. </li>
+			
+				<li><code>--layers="[0,2,4,6]"</code> Dummy slice of ints </li>
 			
 		</ul>
 		
@@ -80,9 +73,10 @@
 
 			
 				
-	<div data-gobra-name=test style="display:none; ">
-		<h3>test</h3>
+	<div data-gobra-name=version style="display:none; ">
+		<h3>version</h3>
 		<ul>
+			
 			
 		</ul>
 		
