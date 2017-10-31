@@ -9,6 +9,7 @@ Gobra generates an HTML snippet.
 import (
 	"github.com/ctessum/gobra"
 	"html/template"
+	"github.com/ctessum/gobra/example/cmd"
 )
 
 func main () {
@@ -19,44 +20,7 @@ func main () {
 	`
 	output := template.Must(template.New("outputPage").Parse(wrapper))
 
-	cmd := &gobra.Command{
-		TopLevel: true,
-		Name:          "fakewget",
-		Flags: []gobra.Flag{
-			{
-				Name:  "method",
-				Value: "GET",
-				Use: "HTTP request method"
-			},
-			{
-				Name: "header",
-				Value: "Content-Length:test/test",
-				Use: "Header",
-			},
-		},
-		Children: []*gobra.Command{
-			{
-				Name: "fetch",
-				Flags: []gobra.Flag{
-					{
-						Name:  "in-background",
-						Value: "true",
-					},
-				},
-				Children: []*gobra.Command{
-					{
-						Name: "example.tld",
-					},
-					{
-						Name: "website.site",
-					},
-				},
-			},
-			{
-				Name: "ping",
-			},
-		},
-	}
+	cmd := &gobra.CommandFromCobra{ cmd.Root }
 
 	val, err := cmd.Render();
 	if err != nil {

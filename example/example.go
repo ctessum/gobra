@@ -28,6 +28,7 @@ import (
 	"os" // for now
 	"github.com/ctessum/gobra"
 	"html/template"
+	"github.com/ctessum/gobra/example/cmd"
 )
 
 func main() {
@@ -55,45 +56,9 @@ func main() {
 `
 	output := template.Must(template.New("outputPage").Parse(tmpl))
 
-	cmd := &gobra.Command{
-		TopLevel: true,
-		Name:          "go",
-		Flags: []gobra.Flag{
-			{
-				Name:  "param",
-				Value: "value",
-			},
-			{
-				Name: "descr",
-				Value: "testi test",
-				Use: "Flag used for description",
-			},
-		},
-		Children: []*gobra.Command{
-			{
-				Name: "run",
-				Flags: []gobra.Flag{
-					{
-						Name:  "background",
-						Value: "true",
-					},
-				},
-				Children: []*gobra.Command{
-					{
-						Name: "example.go",
-					},
-					{
-						Name: "somefile.go",
-					},
-				},
-			},
-			{
-				Name: "test",
-			},
-		},
-	}
+	c := &gobra.CommandFromCobra{ cmd.Root }
 
-	val, err := cmd.Render();
+	val, err := c.Render();
 	if err != nil {
 		panic(err)
 	}
