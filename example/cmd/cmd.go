@@ -2,6 +2,7 @@
 	This file is MIT licensed.
 **/
 
+
 package cmd
 
 import (
@@ -14,7 +15,7 @@ var (
 	// configFile specifies the location of the configuration file.
 	configFile string
 
-	// should this dummy program runs in background
+	// if set to true, this dummy program runs in background
 	inBackground bool
 
 	// dummy slice
