@@ -10,17 +10,17 @@
 	</style>
 </head>
 <body>
-	<div class="container">
-		<h1>Some valid HTML page here</h1>
-		<span>Below is a div where Gobra is added.</span>
-		<div>
-			
-<div>
+<div class="container">
+	<h1>Some valid HTML page here</h1>
+	<span>Below is a div where Gobra is added.</span>
+	<div>
+		
+<div id="gobra-dummy">
 
 
 	<div data-gobra-name=dummy style="">
 		<h3>dummy</h3>
-		<ul>
+		<ul class="flags">
 			
 				<li><code>--config="./conf.toml"</code> configuration file location </li>
 			
@@ -37,9 +37,9 @@
 			</select>
 			
 				
-	<div data-gobra-name=run style="display:none; ">
+	<div data-gobra-name=run style="display:none;">
 		<h3>run</h3>
-		<ul>
+		<ul class="flags">
 			
 				<li><code>--inBackground="false"</code> Program will run in background if sent true </li>
 			
@@ -54,9 +54,9 @@
 			</select>
 			
 				
-	<div data-gobra-name=steady style="display:none; ">
+	<div data-gobra-name=steady style="display:none;">
 		<h3>steady</h3>
-		<ul>
+		<ul class="flags">
 			
 			
 				<li><code>--begin="0"</code> Beginning row index. </li>
@@ -73,9 +73,9 @@
 
 			
 				
-	<div data-gobra-name=version style="display:none; ">
+	<div data-gobra-name=version style="display:none;">
 		<h3>version</h3>
-		<ul>
+		<ul class="flags">
 			
 			
 		</ul>
@@ -86,19 +86,67 @@
 		
 	</div>
 
+<br/>
+<button>Execute</button>
+<pre class="gobraStatus" style="padding:10px; background:lightgray; height:10em; overflow-y:scroll; white-space: pre-wrap;">
+</pre>
 <script>
-	document.querySelectorAll("[data-gobra-select]").forEach( option => {
+
+let status = document.querySelector("#gobra-dummy .gobraStatus");
+	document.querySelectorAll("#gobra-dummy [data-gobra-select]").forEach( option => {
 		option.onchange = e => {
 			[...e.target.parentElement.children].forEach( el => {
 				if (el.tagName == "DIV")
 					el.style.display = (el.dataset.gobraName == e.target.value)? "" : "none";
 			})
 		}
-	})
+	});
+
+	document.querySelector("#gobra-dummy>button").onclick = e => {
+		let recurse = el => {
+			let cmds = [],
+				flags = [];
+			if (el.tagName = "DIV" && el.style.display !== "none") {
+				if (el.dataset.gobraName) { 
+					cmds.push(el.dataset.gobraName);
+					[...el.querySelector("ul.flags").querySelectorAll("code")].forEach(f => flags.push(f.textContent))
+				}
+				[...el.children].forEach( child => {
+					if (child.style.display !== "none") {
+						let childRes = recurse(child);
+						Array.prototype.push.apply(cmds, childRes[0]);
+						Array.prototype.push.apply(flags, childRes[1]);
+						return;
+					} 
+				})
+			}
+			return [cmds, flags];
+		}
+		let resultCommand = recurse(document.getElementById("gobra-dummy"));
+
+		status.textContent += "Sent data to server. \n" ;
+		status.scrollTop = status.scrollHeight;
+
+		serverSend({
+			cmds: resultCommand[0],
+			flags: resultCommand[1]
+		}).then(res => res.text()).then( d => {
+			status.textContent += "Server says: " + d + "\n";
+			status.scrollTop = status.scrollHeight;
+		})
+	}
+
+const serverAddress =  "/gobra" ;
+let serverSend = data => {
+	return fetch(serverAddress+"?data="+JSON.stringify(data));
+}
 </script>
 </div>
 
-		</div>
 	</div>
+	<footer>
+		Add more content below. But here's a footer. 2017.
+	</footer>
+</div>
 </body>
 </html>

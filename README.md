@@ -27,9 +27,12 @@ func main () {
 		panic(err)
 	}
 
-	f, err := os.Create("out.html")
+	f, err := os.Create("index.html")
 
 	output.Execute(f, template.HTML(val))
+
+	server := gobra.Server { 8080, false, false }
+	server.Start()
 }
 
 ```

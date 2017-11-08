@@ -25,7 +25,8 @@ SOFTWARE.
 package main
 
 import (
-	"os" // for now
+	"fmt"
+	"os"
 	"github.com/ctessum/gobra"
 	"html/template"
 	"github.com/ctessum/gobra/example/cmd"
@@ -44,19 +45,24 @@ func main() {
 	</style>
 </head>
 <body>
-	<div class="container">
-		<h1>Some valid HTML page here</h1>
-		<span>Below is a div where Gobra is added.</span>
-		<div>
-			{{.}}
-		</div>
+<div class="container">
+	<h1>Some valid HTML page here</h1>
+	<span>Below is a div where Gobra is added.</span>
+	<div>
+		{{.}}
 	</div>
+	<footer>
+		Add more content below. But here's a footer. 2017.
+	</footer>
+</div>
 </body>
 </html>
 `
 	output := template.Must(template.New("outputPage").Parse(tmpl))
 
-	c := &gobra.CommandFromCobra{ cmd.Root }
+	fmt.Println("Generating front-end html.")
+
+	c := &gobra.CommandFromCobra{ cmd.Root , "" }
 
 	val, err := c.Render();
 	if err != nil {
@@ -64,6 +70,11 @@ func main() {
 	}
 
 	f, err := os.Create("index.html")
-
 	output.Execute(f, template.HTML(val))
+
+	fmt.Println("Successfully generated front-end html.")
+	fmt.Println("Starting server, with front-end html/js.")
+
+	server := gobra.Server { 8080, false, false }
+	server.Start()
 }

@@ -28,6 +28,10 @@ package gobra
 
 import (
 	"bytes"
+	"encoding/json"
+	"fmt"
+	"strings"
+	"net/http"
 	"html/template"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -37,6 +41,9 @@ import (
 type CommandFromCobra struct {
 	// CobraCmd holds the pointer to a Cobra command
 	CobraCmd *cobra.Command 
+	// Server address that the front-end will communicate with.
+	// If left blank, it will communicate to /gobra of the same host.
+	ServerAddress string
 }
 
 var tCmd *template.Template
@@ -58,11 +65,11 @@ func init() {
 	}
 
 	const commandTpl = `
-<div>
+<div id="gobra-{{.CobraCmd.Use}}">
 {{ define "command" }}
-	<div data-gobra-name={{.Use}} style="{{if .HasParent }}display:none; {{end}}">
+	<div data-gobra-name={{.Use}} style="{{if .HasParent }}display:none;{{end}}">
 		<h3>{{.Use}}</h3>
-		<ul>
+		<ul class="flags">
 			{{ range (flagSetToSlice .PersistentFlags) }}
 				<li><code>--{{ .Name }}="{{ .Value.String }}"</code> {{ .Usage }} </li>
 			{{ end }}
@@ -83,16 +90,61 @@ func init() {
 		{{ end }}
 	</div>
 {{ end }}
-{{ template "command" .}}
+{{ template "command" .CobraCmd }}
+<br/>
+<button>Execute</button>
+<pre class="gobraStatus" style="padding:10px; background:lightgray; height:10em; overflow-y:scroll; white-space: pre-wrap;">
+</pre>
 <script>
-	document.querySelectorAll("[data-gobra-select]").forEach( option => {
+{{ with .CobraCmd }}
+let status = document.querySelector("#gobra-{{.Use}} .gobraStatus");
+	document.querySelectorAll("#gobra-{{.Use}} [data-gobra-select]").forEach( option => {
 		option.onchange = e => {
 			[...e.target.parentElement.children].forEach( el => {
 				if (el.tagName == "DIV")
 					el.style.display = (el.dataset.gobraName == e.target.value)? "" : "none";
 			})
 		}
-	})
+	});
+
+	document.querySelector("#gobra-{{.Use}}>button").onclick = e => {
+		let recurse = el => {
+			let cmds = [],
+				flags = [];
+			if (el.tagName = "DIV" && el.style.display !== "none") {
+				if (el.dataset.gobraName) { 
+					cmds.push(el.dataset.gobraName);
+					[...el.querySelector("ul.flags").querySelectorAll("code")].forEach(f => flags.push(f.textContent))
+				}
+				[...el.children].forEach( child => {
+					if (child.style.display !== "none") {
+						let childRes = recurse(child);
+						Array.prototype.push.apply(cmds, childRes[0]);
+						Array.prototype.push.apply(flags, childRes[1]);
+						return;
+					} 
+				})
+			}
+			return [cmds, flags];
+		}
+		let resultCommand = recurse(document.getElementById("gobra-{{.Use}}"));
+
+		status.textContent += "Sent data to server. \n" ;
+		status.scrollTop = status.scrollHeight;
+
+		serverSend({
+			cmds: resultCommand[0],
+			flags: resultCommand[1]
+		}).then(res => res.text()).then( d => {
+			status.textContent += "Server says: " + d + "\n";
+			status.scrollTop = status.scrollHeight;
+		})
+	}
+{{ end }}
+const serverAddress = {{ if .ServerAddress}} {{ .ServerAddress }} {{ else }} "/gobra" {{ end }};
+let serverSend = data => {
+	return fetch(serverAddress+"?data="+JSON.stringify(data));
+}
 </script>
 </div>
 `
@@ -103,9 +155,61 @@ func init() {
 // Render renders the view of the command.
 func (c *CommandFromCobra) Render() ([]byte, error) {
 	b := new(bytes.Buffer)
-	if err := tCmd.Execute(b, c.CobraCmd); err != nil {
+	if err := tCmd.Execute(b, c); err != nil {
 		return b.Bytes(), err
 	}
 	
 	return b.Bytes(), nil
+}
+
+// Server-side
+// Serves a Gobra API at: <hostname>:<port>/gobra
+// Also serves a front-end interface at: <hostname>:<port>/[index.html]
+// You must generate this interface first with gobra.CommandFromCobra.Render(), or it will serve 404
+
+// Server struct/class that holds configuration for a Cobra back-end instance
+type Server struct {
+	// port the server will run on
+	Port int
+	// Allow Cross-Origin. If set to true, everyone can use the Gobra instance on client-side
+	// Set this to true if you're planning to expose the API to public.
+	AllowCORS bool
+	// If set to true, it won't be serving an html for front-end
+	Frontless bool
+}
+
+// Struct representing data received from front-end.
+// JSON sent from front-end must comply to this struct or application rejects.
+type APIRequestData struct {
+	// Commands names received from front-end
+	Cmds []string
+	// Flags received from front-end
+	Flags []string
+}
+
+func (s *Server) APIHandler(w http.ResponseWriter, r *http.Request) {
+	if s.AllowCORS {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+	}
+	r.ParseForm()
+
+	var data APIRequestData;
+	if err := json.Unmarshal([]byte(r.FormValue("data")), &data); err != nil {
+		fmt.Fprintf(w, "Malformed data")
+	} else {
+		fmt.Println("Got data.")
+		fmt.Fprintf(w, "Got: " + strings.Join(data.Cmds, " ") + " " + strings.Join(data.Flags, " "))
+	}
+}
+
+func (s *Server) FrontHandler(w http.ResponseWriter, r *http.Request) {
+	http.ServeFile(w, r, r.URL.Path[1:])
+}
+
+func (s *Server) Start() {
+	http.HandleFunc("/gobra", s.APIHandler)
+	if !s.Frontless {
+		http.HandleFunc("/", s.FrontHandler)
+	}
+	fmt.Println(http.ListenAndServe(":" + fmt.Sprintf("%v", s.Port), nil))
 }
