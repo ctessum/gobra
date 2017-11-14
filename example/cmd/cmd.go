@@ -5,6 +5,7 @@ package cmd
 
 import (
 	"fmt"
+	"errors"
 	"github.com/spf13/cobra"
 )
 
@@ -43,8 +44,9 @@ var Root = &cobra.Command{
 	Use:   "dummy",
 	Short: "A dummy program",
 	Long: `This is a longer description for a dummy program, which does not do anything and only exists for the purpose of being an example.`,
-	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		fmt.Println(`I'm ran.`)
+	Run: func(cmd *cobra.Command, args []string) {
+		fmt.Println(`I'm dummy!`)
+		cmd.Println("This prints to the other output")
 	},
 	DisableAutoGenTag: true,
 }
@@ -54,7 +56,8 @@ var versionCmd = &cobra.Command{
 	Short: "Print the version number",
 	Long:  "version prints the version number of this version of dummy.",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("Version 1")
+		fmt.Println("I'm version!")
+		cmd.Println("Version 1")
 	},
 	DisableAutoGenTag: true,
 }
@@ -64,6 +67,10 @@ var runCmd = &cobra.Command{
 	Short: "Run the program.",
 	Long: `run runs program and executes it.`,
 	DisableAutoGenTag: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		cmd.Println("Running program & stuff")
+		return nil
+	},
 }
 
 // steadyCmd is a command that runs a steady-state simulation.
@@ -72,8 +79,8 @@ var steadyCmd = &cobra.Command{
 	Short: "Run dummy in steady-state mode.",
 	Long: `steady runs program in steady-stated mode so nothing goes out of stability.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Println("Yeah, I'm running steady")
-		return nil
+		cmd.Println("Yeah, I'm running steady")
+		return errors.New("Oh no! An error! I'm not steady")
 	},
 	DisableAutoGenTag: true,
 }

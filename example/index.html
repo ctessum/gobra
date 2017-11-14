@@ -133,6 +133,9 @@ let status = document.querySelector("#gobra-dummy .gobraStatus");
 		}).then(res => res.text()).then( d => {
 			status.textContent += "Server says: " + d + "\n";
 			status.scrollTop = status.scrollHeight;
+		}).catch(e => {
+			status.textContent += "Failed: " + e + "\n";
+			status.scrollTop = status.scrollHeight;
 		})
 	}
 

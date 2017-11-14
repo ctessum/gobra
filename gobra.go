@@ -30,7 +30,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"net/http"
 	"html/template"
 	"github.com/spf13/cobra"
@@ -138,6 +137,9 @@ let status = document.querySelector("#gobra-{{.Use}} .gobraStatus");
 		}).then(res => res.text()).then( d => {
 			status.textContent += "Server says: " + d + "\n";
 			status.scrollTop = status.scrollHeight;
+		}).catch(e => {
+			status.textContent += "Failed: " + e + "\n";
+			status.scrollTop = status.scrollHeight;
 		})
 	}
 {{ end }}
@@ -169,6 +171,8 @@ func (c *CommandFromCobra) Render() ([]byte, error) {
 
 // Server struct/class that holds configuration for a Cobra back-end instance
 type Server struct {
+	// Gobra command tree root
+	Root *cobra.Command
 	// port the server will run on
 	Port int
 	// Allow Cross-Origin. If set to true, everyone can use the Gobra instance on client-side
@@ -197,8 +201,20 @@ func (s *Server) APIHandler(w http.ResponseWriter, r *http.Request) {
 	if err := json.Unmarshal([]byte(r.FormValue("data")), &data); err != nil {
 		fmt.Fprintf(w, "Malformed data")
 	} else {
-		fmt.Println("Got data.")
-		fmt.Fprintf(w, "Got: " + strings.Join(data.Cmds, " ") + " " + strings.Join(data.Flags, " "))
+		var out bytes.Buffer
+		c, _, _ := s.Root.Find(data.Cmds[1:])
+		c.SetOutput(&out)
+
+		if c.Run != nil {
+			c.Run(c, nil)
+		} else if c.RunE != nil {
+			e := c.RunE(c, nil)
+			if e != nil {
+				fmt.Fprintf(w, "Error received: " + e.Error())
+				return
+			}
+		}
+		fmt.Fprintf(w, out.String())
 	}
 }
 

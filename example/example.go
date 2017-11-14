@@ -74,7 +74,8 @@ func main() {
 
 	fmt.Println("Successfully generated front-end html.")
 	fmt.Println("Starting server, with front-end html/js.")
+	fmt.Println("------------------")
 
-	server := gobra.Server { 8080, false, false }
+	server := gobra.Server { cmd.Root, 8080, false, false }
 	server.Start()
 }
