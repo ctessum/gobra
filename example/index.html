@@ -49,9 +49,26 @@
 			<select data-gobra-select>
 				<option selected disabled>Select</option>
 				
+				<option value="add">add</option>
+				
 				<option value="steady">steady</option>
 				
 			</select>
+			
+				
+	<div data-gobra-name=add style="display:none;">
+		<h3>add</h3>
+		<ul class="flags">
+			
+			
+				<li><code data-name=num1>--num1=<input value=1></input></code> First number </li>
+			
+				<li><code data-name=num2>--num2=<input value=1></input></code> Second number </li>
+			
+		</ul>
+		
+	</div>
+
 			
 				
 	<div data-gobra-name=steady style="display:none;">
@@ -59,9 +76,9 @@
 		<ul class="flags">
 			
 			
-				<li><code>--begin="0"</code> Beginning row index. </li>
+				<li><code data-name=begin>--begin=<input value=0></input></code> Beginning row index. </li>
 			
-				<li><code>--layers="[0,2,4,6]"</code> Dummy slice of ints </li>
+				<li><code data-name=layers>--layers=<input value=[0,2,4,6]></input></code> Dummy slice of ints </li>
 			
 		</ul>
 		
@@ -109,7 +126,9 @@ let status = document.querySelector("#gobra-dummy .gobraStatus");
 			if (el.tagName = "DIV" && el.style.display !== "none") {
 				if (el.dataset.gobraName) { 
 					cmds.push(el.dataset.gobraName);
-					[...el.querySelector("ul.flags").querySelectorAll("code")].forEach(f => flags.push(f.textContent))
+					[...el.querySelector("ul.flags").querySelectorAll("code")].forEach(f => {
+						if(f.children[0]) flags.push(f.dataset.name + "=" + f.children[0].value);
+					})
 				}
 				[...el.children].forEach( child => {
 					if (child.style.display !== "none") {
@@ -122,26 +141,29 @@ let status = document.querySelector("#gobra-dummy .gobraStatus");
 			}
 			return [cmds, flags];
 		}
-		let resultCommand = recurse(document.getElementById("gobra-dummy"));
+		let resultCmd = recurse(document.getElementById("gobra-dummy"));
 
-		status.textContent += "Sent data to server. \n" ;
+		status.textContent += "→ "+resultCmd.reduce((x,y) => {
+				return x.join(" ") + " " 
+					+ y.map(z => 
+						"--"+z.split("=")[0]+"=\""+z.split("=")[1]+"\""
+					).join(" ")
+			})+"\n" ;
 		status.scrollTop = status.scrollHeight;
 
-		serverSend({
-			cmds: resultCommand[0],
-			flags: resultCommand[1]
-		}).then(res => res.text()).then( d => {
-			status.textContent += "Server says: " + d + "\n";
+		serverSend(resultCmd[0], resultCmd[1])
+		.then(res => res.text()).then( d => {
+			status.textContent += "← " + d + "\n";
 			status.scrollTop = status.scrollHeight;
 		}).catch(e => {
-			status.textContent += "Failed: " + e + "\n";
+			status.textContent += "⤬ Failed communicating with server: " + e + "\n";
 			status.scrollTop = status.scrollHeight;
 		})
 	}
 
-const serverAddress =  "/gobra" ;
-let serverSend = data => {
-	return fetch(serverAddress+"?data="+JSON.stringify(data));
+const serverAddress =  "/" ;
+let serverSend = (cmds, flags) => {
+	return fetch(cmds.join("/")+"?"+flags.join("&"));
 }
 </script>
 </div>

@@ -28,7 +28,7 @@ package gobra
 
 import (
 	"bytes"
-	"encoding/json"
+	"strings"
 	"fmt"
 	"net/http"
 	"html/template"
@@ -73,7 +73,7 @@ func init() {
 				<li><code>--{{ .Name }}="{{ .Value.String }}"</code> {{ .Usage }} </li>
 			{{ end }}
 			{{ range (flagSetToSlice .Flags) }}
-				<li><code>--{{ .Name }}="{{ .Value.String }}"</code> {{ .Usage }} </li>
+				<li><code data-name={{ .Name }}>--{{ .Name }}=<input value={{ .Value.String }}></input></code> {{ .Usage }} </li>
 			{{ end }}
 		</ul>
 		{{ if .HasSubCommands }}
@@ -113,7 +113,9 @@ let status = document.querySelector("#gobra-{{.Use}} .gobraStatus");
 			if (el.tagName = "DIV" && el.style.display !== "none") {
 				if (el.dataset.gobraName) { 
 					cmds.push(el.dataset.gobraName);
-					[...el.querySelector("ul.flags").querySelectorAll("code")].forEach(f => flags.push(f.textContent))
+					[...el.querySelector("ul.flags").querySelectorAll("code")].forEach(f => {
+						if(f.children[0]) flags.push(f.dataset.name + "=" + f.children[0].value);
+					})
 				}
 				[...el.children].forEach( child => {
 					if (child.style.display !== "none") {
@@ -126,26 +128,29 @@ let status = document.querySelector("#gobra-{{.Use}} .gobraStatus");
 			}
 			return [cmds, flags];
 		}
-		let resultCommand = recurse(document.getElementById("gobra-{{.Use}}"));
+		let resultCmd = recurse(document.getElementById("gobra-{{.Use}}"));
 
-		status.textContent += "Sent data to server. \n" ;
+		status.textContent += "→ "+resultCmd.reduce((x,y) => {
+				return x.join(" ") + " " 
+					+ y.map(z => 
+						"--"+z.split("=")[0]+"=\""+z.split("=")[1]+"\""
+					).join(" ")
+			})+"\n" ;
 		status.scrollTop = status.scrollHeight;
 
-		serverSend({
-			cmds: resultCommand[0],
-			flags: resultCommand[1]
-		}).then(res => res.text()).then( d => {
-			status.textContent += "Server says: " + d + "\n";
+		serverSend(resultCmd[0], resultCmd[1])
+		.then(res => res.text()).then( d => {
+			status.textContent += "← " + d + "\n";
 			status.scrollTop = status.scrollHeight;
 		}).catch(e => {
-			status.textContent += "Failed: " + e + "\n";
+			status.textContent += "⤬ Failed communicating with server: " + e + "\n";
 			status.scrollTop = status.scrollHeight;
 		})
 	}
 {{ end }}
-const serverAddress = {{ if .ServerAddress}} {{ .ServerAddress }} {{ else }} "/gobra" {{ end }};
-let serverSend = data => {
-	return fetch(serverAddress+"?data="+JSON.stringify(data));
+const serverAddress = {{ if .ServerAddress}} {{ .ServerAddress }} {{ else }} "/" {{ end }};
+let serverSend = (cmds, flags) => {
+	return fetch(cmds.join("/")+"?"+flags.join("&"));
 }
 </script>
 </div>
@@ -165,7 +170,7 @@ func (c *CommandFromCobra) Render() ([]byte, error) {
 }
 
 // Server-side
-// Serves a Gobra API at: <hostname>:<port>/gobra
+// Serves a Gobra API at: <hostname>:<port>/
 // Also serves a front-end interface at: <hostname>:<port>/[index.html]
 // You must generate this interface first with gobra.CommandFromCobra.Render(), or it will serve 404
 
@@ -182,50 +187,44 @@ type Server struct {
 	Frontless bool
 }
 
-// Struct representing data received from front-end.
-// JSON sent from front-end must comply to this struct or application rejects.
-type APIRequestData struct {
-	// Commands names received from front-end
-	Cmds []string
-	// Flags received from front-end
-	Flags []string
-}
-
-func (s *Server) APIHandler(w http.ResponseWriter, r *http.Request) {
-	if s.AllowCORS {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-	}
-	r.ParseForm()
-
-	var data APIRequestData;
-	if err := json.Unmarshal([]byte(r.FormValue("data")), &data); err != nil {
-		fmt.Fprintf(w, "Malformed data")
-	} else {
-		var out bytes.Buffer
-		c, _, _ := s.Root.Find(data.Cmds[1:])
-		c.SetOutput(&out)
-
-		if c.Run != nil {
-			c.Run(c, nil)
-		} else if c.RunE != nil {
-			e := c.RunE(c, nil)
-			if e != nil {
-				fmt.Fprintf(w, "Error received: " + e.Error())
-				return
-			}
+func (s *Server) handler(w http.ResponseWriter, r *http.Request) {
+	if (r.URL.Path == "/") {
+		// Serves front-end if root is requested
+		if !s.Frontless {
+			http.ServeFile(w, r, "index.html")
 		}
-		fmt.Fprintf(w, out.String())
-	}
-}
+	} else if (strings.HasPrefix(r.URL.Path, "/"+s.Root.Use)) {
+		// Serves API if path starts with root command name
+		if s.AllowCORS {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+		}
 
-func (s *Server) FrontHandler(w http.ResponseWriter, r *http.Request) {
-	http.ServeFile(w, r, r.URL.Path[1:])
+		r.ParseForm()
+		cmds := strings.Split(r.URL.Path[1:], "/")
+		flags := r.Form
+
+		var out bytes.Buffer
+		s.Root.SetArgs(cmds[1:])
+		s.Root.SetOutput(&out)
+
+		// Getting the command we need to set flags
+		c, _, _ := s.Root.Find(cmds[1:])
+		for key, values := range flags {
+			c.Flags().Set(key, values[0])
+		}
+		
+		fmt.Println("Executing: ", cmds, flags)
+		s.Root.ExecuteC()
+		fmt.Fprintf(w, out.String())
+
+	} else {
+		// Everything else gets a 404
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w, "404 Page not Found")
+	}
 }
 
 func (s *Server) Start() {
-	http.HandleFunc("/gobra", s.APIHandler)
-	if !s.Frontless {
-		http.HandleFunc("/", s.FrontHandler)
-	}
+	http.HandleFunc("/", s.handler)
 	fmt.Println(http.ListenAndServe(":" + fmt.Sprintf("%v", s.Port), nil))
 }

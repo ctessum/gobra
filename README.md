@@ -54,3 +54,12 @@ func main () {
 }
 
 ```
+
+## API endpoints
+
+If you decide to use Gobra only as a server, the API endpoint works like so:
+
+If the command you want to run is: `app math add --num1=3 --num2=6`
+
+You would want to make a GET request to: `//<serverAddress>/app/math/add?num1=3&num2=6`
+

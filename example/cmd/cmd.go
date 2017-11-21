@@ -22,6 +22,9 @@ var (
 
 	// dummy starting index
 	begin int
+
+	// addition flags
+	num1, num2 int
 )
 
 func init() {
@@ -29,6 +32,7 @@ func init() {
 	Root.AddCommand(versionCmd)
 	Root.AddCommand(runCmd)
 	runCmd.AddCommand(steadyCmd)
+	runCmd.AddCommand(addition)
 
 	// Create the configuration flags.
 	Root.PersistentFlags().StringVar(&configFile, "config", "./conf.toml", "configuration file location")
@@ -36,6 +40,8 @@ func init() {
 	runCmd.PersistentFlags().BoolVarP(&inBackground, "inBackground", "s", false, "Program will run in background if sent true")
 	steadyCmd.Flags().IntSliceVar(&layers, "layers", []int{0, 2, 4, 6},	"Dummy slice of ints")
 	steadyCmd.Flags().IntVar(&begin, "begin", 0, "Beginning row index.")
+	addition.Flags().IntVar(&num1, "num1", 1, "First number")
+	addition.Flags().IntVar(&num2, "num2", 1, "Second number")
 
 }
 
@@ -44,9 +50,16 @@ var Root = &cobra.Command{
 	Use:   "dummy",
 	Short: "A dummy program",
 	Long: `This is a longer description for a dummy program, which does not do anything and only exists for the purpose of being an example.`,
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		fmt.Println("I must run before any subcommand runs")
+		cmd.Print("I'm always printed: ")
+	},
+	PreRun: func(cmd *cobra.Command, args []string) {
+		fmt.Println("Hey, run me before Run execute")
+	},
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println(`I'm dummy!`)
-		cmd.Println("This prints to the other output")
+		fmt.Println("I'm dummy")
+		cmd.Println("This is supposed to print to the other output")
 	},
 	DisableAutoGenTag: true,
 }
@@ -70,6 +83,15 @@ var runCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cmd.Println("Running program & stuff")
 		return nil
+	},
+}
+
+var addition = &cobra.Command{
+	Use: "add",
+	Short: "adds two number",
+	Long: "We perform the addition operation on two numerical operands. The operation yields the sum of two operands, which are inputted as flags.",
+	Run: func(cmd *cobra.Command, args []string) {
+		cmd.Println( num1 + num2 )
 	},
 }
 
