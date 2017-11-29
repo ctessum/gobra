@@ -15,3 +15,6 @@
 
 # MacOS
 .DS_Store
+
+example/inmap_test
+

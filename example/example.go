@@ -26,10 +26,10 @@ package main
 
 import (
 	"fmt"
-	"os"
 	"github.com/ctessum/gobra"
-	"html/template"
 	"github.com/ctessum/gobra/example/cmd"
+	"html/template"
+	"os"
 )
 
 func main() {
@@ -62,20 +62,23 @@ func main() {
 
 	fmt.Println("Generating front-end html.")
 
-	c := &gobra.CommandFromCobra{ cmd.Root , "" }
+	c := &gobra.CommandFromCobra{cmd.Root, ""}
 
-	val, err := c.Render();
+	val, err := c.Render()
 	if err != nil {
 		panic(err)
 	}
 
 	f, err := os.Create("index.html")
+	if err != nil {
+		panic(err)
+	}
 	output.Execute(f, template.HTML(val))
 
 	fmt.Println("Successfully generated front-end html.")
 	fmt.Println("Starting server, with front-end html/js.")
 	fmt.Println("------------------")
 
-	server := gobra.Server { cmd.Root, 8080, false, false }
+	server := gobra.Server{cmd.Root, 8080, false, false}
 	server.Start()
 }
