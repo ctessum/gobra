@@ -29,11 +29,12 @@ package gobra
 import (
 	"bytes"
 	"fmt"
-	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 	"html/template"
 	"net/http"
 	"strings"
+
+	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 // CommandFromCobra is a wrapper for cobra.Command to work with Gobra
@@ -47,20 +48,30 @@ type CommandFromCobra struct {
 
 var tCmd *template.Template
 
-// FlagSetToSlice converts pflag.FlagSet to slices for iteration
-func FlagSetToSlice(fl *pflag.FlagSet) []*pflag.Flag {
+// flagSetToSlice converts pflag.FlagSet to slices for iteration
+func flagSetToSlice(fl *pflag.FlagSet) []*pflag.Flag {
 	var out []*pflag.Flag
 
 	fl.VisitAll(func(f *pflag.Flag) {
-		out = append(out, f)
+		if f.Name != "help" {
+			out = append(out, f)
+		}
 	})
 	return out
+}
+
+func notHelpCommand(use string) bool {
+	if use != "help [command]" {
+		return true
+	}
+	return false
 }
 
 func init() {
 
 	var funcMaps = template.FuncMap{
-		"flagSetToSlice": FlagSetToSlice,
+		"flagSetToSlice": flagSetToSlice,
+		"notHelpCommand": notHelpCommand,
 	}
 
 	const commandTpl = `
@@ -68,11 +79,12 @@ func init() {
 {{ define "command" }}
 	<div data-gobra-name={{.Use}} style="{{if .HasParent }}display:none;{{end}}">
 		<h3>{{.Use}}</h3>
+		<p>{{.Long}}</p>
 		<ul class="flags">
 			{{ range (flagSetToSlice .PersistentFlags) }}
 				<li><code data-name={{ .Name }}>--{{ .Name }}=<input value={{ .Value.String }}></input></code><br><blockquote>{{ .Usage }} </blockquote></li>
 			{{ end }}
-			{{ range (flagSetToSlice .Flags) }}
+			{{ range (flagSetToSlice .LocalNonPersistentFlags) }}
 				<li><code data-name={{ .Name }}>--{{ .Name }}=<input value={{ .Value.String }}></input></code><br><blockquote>{{ .Usage }} </blockquote></li>
 			{{ end }}
 		</ul>
@@ -80,7 +92,7 @@ func init() {
 			<select data-gobra-select>
 				<option selected disabled>Select</option>
 				{{ range .Commands }}
-				<option value="{{.Use}}">{{ .Use }}</option>
+				{{ if (notHelpCommand .Use ) }}<option value="{{.Use}}">{{ .Use }}</option>{{ end }}
 				{{ end }}
 			</select>
 			{{range .Commands }}
@@ -111,7 +123,7 @@ let status = document.querySelector("#gobra-{{.Use}} .gobraStatus");
 			let cmds = [],
 				flags = [];
 			if (el.tagName = "DIV" && el.style.display !== "none") {
-				if (el.dataset.gobraName) { 
+				if (el.dataset.gobraName) {
 					cmds.push(el.dataset.gobraName);
 					[...el.querySelector("ul.flags").querySelectorAll("code")].forEach(f => {
 						if(f.children[0]) flags.push(f.dataset.name + "=" + f.children[0].value);
@@ -123,7 +135,7 @@ let status = document.querySelector("#gobra-{{.Use}} .gobraStatus");
 						Array.prototype.push.apply(cmds, childRes[0]);
 						Array.prototype.push.apply(flags, childRes[1]);
 						return;
-					} 
+					}
 				})
 			}
 			return [cmds, flags];
@@ -131,8 +143,8 @@ let status = document.querySelector("#gobra-{{.Use}} .gobraStatus");
 		let resultCmd = recurse(document.getElementById("gobra-{{.Use}}"));
 
 		status.textContent += "→ "+resultCmd.reduce((x,y) => {
-				return x.join(" ") + " " 
-					+ y.map(z => 
+				return x.join(" ") + " "
+					+ y.map(z =>
 						"--"+z.split("=")[0]+"=\""+z.split("=")[1]+"\""
 					).join(" ")
 			})+"\n" ;
@@ -150,7 +162,7 @@ let status = document.querySelector("#gobra-{{.Use}} .gobraStatus");
 {{ end }}
 const serverAddress = {{ if .ServerAddress}} {{ .ServerAddress }} {{ else }} "/" {{ end }};
 let serverSend = (cmds, flags) => {
-	return fetch(cmds.join("/")+"?"+flags.join("&"));
+	return fetch("http://"+serverAddress+"/"+cmds.join("/")+"?"+flags.join("&"));
 }
 </script>
 </div>
@@ -159,8 +171,8 @@ let serverSend = (cmds, flags) => {
 	tCmd = template.Must(template.New("commands").Funcs(funcMaps).Parse(commandTpl))
 }
 
-// Render renders the view of the command.
-func (c *CommandFromCobra) Render() ([]byte, error) {
+// render renders the view of the command.
+func (c *CommandFromCobra) render() ([]byte, error) {
 	b := new(bytes.Buffer)
 	if err := tCmd.Execute(b, c); err != nil {
 		return b.Bytes(), err
@@ -177,23 +189,27 @@ func (c *CommandFromCobra) Render() ([]byte, error) {
 // Server struct/class that holds configuration for a Cobra back-end instance
 type Server struct {
 	// Gobra command tree root
-	Root *cobra.Command
-	// port the server will run on
-	Port int
+	Root *CommandFromCobra
 	// Allow Cross-Origin. If set to true, everyone can use the Gobra instance on client-side
 	// Set this to true if you're planning to expose the API to public.
 	AllowCORS bool
-	// If set to true, it won't be serving an html for front-end
-	Frontless bool
+	// If this is not nil, it will be served as an HTML front end.
+	HTML *template.Template
 }
 
 func (s *Server) handler(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/" {
 		// Serves front-end if root is requested
-		if !s.Frontless {
-			http.ServeFile(w, r, "index.html")
+		if s.HTML != nil {
+			bytes, err := s.Root.render()
+			if err != nil {
+				http.Error(w, err.Error(), 500)
+			}
+			if err := s.HTML.Execute(w, template.HTML(bytes)); err != nil {
+				http.Error(w, err.Error(), 500)
+			}
 		}
-	} else if strings.HasPrefix(r.URL.Path, "/"+s.Root.Use) {
+	} else if strings.HasPrefix(r.URL.Path, "/"+s.Root.CobraCmd.Use) {
 		// Serves API if path starts with root command name
 		if s.AllowCORS {
 			w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -204,17 +220,17 @@ func (s *Server) handler(w http.ResponseWriter, r *http.Request) {
 		flags := r.Form
 
 		var out bytes.Buffer
-		s.Root.SetArgs(cmds[1:])
-		s.Root.SetOutput(&out)
+		s.Root.CobraCmd.SetArgs(cmds[1:])
+		s.Root.CobraCmd.SetOutput(&out)
 
 		// Getting the command we need to set flags
-		c, _, _ := s.Root.Find(cmds[1:])
+		c, _, _ := s.Root.CobraCmd.Find(cmds[1:])
 		for key, values := range flags {
 			c.Flags().Set(key, values[0])
 		}
 
 		fmt.Println("Executing: ", cmds, flags)
-		s.Root.ExecuteC()
+		s.Root.CobraCmd.ExecuteC()
 		fmt.Fprintf(w, out.String())
 
 	} else {
@@ -224,8 +240,8 @@ func (s *Server) handler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// Start starts the server. 
+// Start starts the server.
 func (s *Server) Start() {
 	http.HandleFunc("/", s.handler)
-	fmt.Println(http.ListenAndServe(":"+fmt.Sprintf("%v", s.Port), nil))
+	fmt.Println(http.ListenAndServe(s.Root.ServerAddress, nil))
 }
