@@ -62,8 +62,6 @@ func main() {
 
 	fmt.Println("Starting server at localhost:8080")
 
-	c := &gobra.CommandFromCobra{CobraCmd: cmd.Root, ServerAddress: "localhost:8080"}
-
-	server := gobra.Server{Root: c, AllowCORS: true, HTML: output}
+	server := gobra.Server{Root: cmd.Root, ServerAddress: "localhost:8080", AllowCORS: true, HTML: output}
 	server.Start()
 }
