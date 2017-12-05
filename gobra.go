@@ -103,63 +103,73 @@ func init() {
 <pre class="gobraStatus" style="padding:10px; background:lightgray; height:30em; overflow-y:scroll; white-space: pre-wrap; word-break: break-all;">
 </pre>
 <script>
+(_ => {
 {{ with .Root }}
 let status = document.querySelector("#gobra-{{.Use}} .gobraStatus");
-	document.querySelectorAll("#gobra-{{.Use}} [data-gobra-select]").forEach( option => {
-		option.onchange = e => {
-			[...e.target.parentElement.children].forEach( el => {
-				if (el.tagName == "DIV")
-					el.style.display = (el.dataset.gobraName == e.target.value)? "" : "none";
-			})
-		}
-	});
+let button = document.querySelector("#gobra-{{.Use}}>button");
 
-	document.querySelector("#gobra-{{.Use}}>button").onclick = e => {
-		let recurse = el => {
-			let cmds = [],
-				flags = [];
-			if (el.tagName = "DIV" && el.style.display !== "none") {
-				if (el.dataset.gobraName) {
-					cmds.push(el.dataset.gobraName);
-					[...el.querySelector("ul.flags").querySelectorAll("code")].forEach(f => {
-						if(f.children[0]) flags.push(f.dataset.name + "=" + f.children[0].value);
-					})
-				}
-				[...el.children].forEach( child => {
-					if (child.style.display !== "none") {
-						let childRes = recurse(child);
-						Array.prototype.push.apply(cmds, childRes[0]);
-						Array.prototype.push.apply(flags, childRes[1]);
-						return;
-					}
+// When an option is chosen, display the correct sub-command.
+document.querySelectorAll("#gobra-{{.Use}} [data-gobra-select]").forEach( option => {
+	option.onchange = e => {
+		[...e.target.parentElement.children].forEach( el => {
+			if (el.tagName == "DIV")
+				el.style.display = (el.dataset.gobraName == e.target.value)? "" : "none";
+		})
+	}
+});
+
+// Compile query when Execute is clicked
+button.onclick = e => {
+	let recurse = el => {
+		let cmds = [],
+			flags = [];
+		if (el.tagName = "DIV" && el.style.display !== "none") {
+			if (el.dataset.gobraName) {
+				cmds.push(el.dataset.gobraName);
+				[...el.querySelector("ul.flags").querySelectorAll("code")].forEach(f => {
+					if(f.children[0]) flags.push(f.dataset.name + "=" + f.children[0].value);
 				})
 			}
-			return [cmds, flags];
+			[...el.children].forEach( child => {
+				if (child.style.display !== "none") {
+					let childRes = recurse(child);
+					Array.prototype.push.apply(cmds, childRes[0]);
+					Array.prototype.push.apply(flags, childRes[1]);
+					return;
+				}
+			})
 		}
-		let resultCmd = recurse(document.getElementById("gobra-{{.Use}}"));
+		return [cmds, flags];
+	}
+	let resultCmd = recurse(document.getElementById("gobra-{{.Use}}"));
 
-		status.textContent += "→ "+resultCmd.reduce((x,y) => {
-				return x.join(" ") + " "
-					+ y.map(z =>
-						"--"+z.split("=")[0]+"=\""+z.split("=")[1]+"\""
-					).join(" ")
-			})+"\n" ;
-		status.scrollTop = status.scrollHeight;
+	button.setAttribute("disabled", "disabled");
+	status.textContent = "→ "+resultCmd.reduce((x,y) => {
+			return x.join(" ") + " "
+				+ y.map(z =>
+					"--"+z.split("=")[0]+"=\""+z.split("=")[1]+"\""
+				).join(" ")
+		})+"\n" ;
+	status.scrollTop = status.scrollHeight;
 
-		serverSend(resultCmd[0], resultCmd[1])
+	serverSend(resultCmd[0], resultCmd[1])
 		.then(res => res.text()).then( d => {
 			status.textContent += "← " + d + "\n";
 			status.scrollTop = status.scrollHeight;
-		}).catch(e => {
+			button.removeAttribute("disabled");
+		})
+		.catch(e => {
 			status.textContent += "⤬ Failed communicating with server: " + e + "\n";
 			status.scrollTop = status.scrollHeight;
-		})
-	}
+			button.removeAttribute("disabled");
+		});
+}
 {{ end }}
 const serverAddress = {{ if .ServerAddress}} {{ .ServerAddress }} {{ else }} "/" {{ end }};
 let serverSend = (cmds, flags) => {
 	return fetch("http://"+serverAddress+"/"+cmds.join("/")+"?"+flags.join("&"));
 }
+})();
 </script>
 </div>
 `
