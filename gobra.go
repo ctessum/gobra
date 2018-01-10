@@ -127,7 +127,7 @@ button.onclick = e => {
 			if (el.dataset.gobraName) {
 				cmds.push(el.dataset.gobraName);
 				[...el.querySelector("ul.flags").querySelectorAll("code")].forEach(f => {
-					if(f.children[0]) flags.push(f.dataset.name + "=" + f.children[0].value);
+					if(f.children[0]) flags.push(f.dataset.name + "=" + encodeURIComponent(f.children[0].value));
 				})
 			}
 			[...el.children].forEach( child => {
