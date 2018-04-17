@@ -36,6 +36,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"golang.org/x/net/websocket"
 )
 
 // CommandFromCobra is a wrapper for cobra.Command to work with Gobra
@@ -100,13 +101,34 @@ func init() {
 {{ template "command" .Root }}
 <br/>
 <button>Execute</button>
+
 <pre class="gobraStatus" style="padding:10px; background:lightgray; height:30em; overflow-y:scroll; white-space: pre-wrap; word-break: break-all;">
 </pre>
+
 <script>
-(_ => {
+const serverAddress = {{ if .ServerAddress}} {{ .ServerAddress }} {{ else }} "/" {{ end }};
+
 {{ with .Root }}
-let status = document.querySelector("#gobra-{{.Use}} .gobraStatus");
-let button = document.querySelector("#gobra-{{.Use}}>button");
+const logger = document.querySelector("#gobra-{{.Use}} .gobraStatus");
+const execBtn = document.querySelector("#gobra-{{.Use}}>button");
+
+// printData prints appends data to destination and scrolls to bottom.
+const printData = (dest, str) => {
+	dest.textContent += str;
+	dest.scrollTop = dest.scrollHeight;
+}
+
+// clearLogger clears content of an output logger.
+const clearLogger = (dest) => {
+	dest.textContent = "";
+}
+
+// serverSend sends a request to the server and returns a Promise.
+// It takes in the commands and flags as an array
+// where each flag are of the format "name=value".
+const serverSend = (cmds, flags) => {
+	return fetch("http://"+serverAddress+"/"+cmds.join("/")+"?"+flags.join("&"));
+}
 
 // When an option is chosen, display the correct sub-command.
 document.querySelectorAll("#gobra-{{.Use}} [data-gobra-select]").forEach( option => {
@@ -119,7 +141,7 @@ document.querySelectorAll("#gobra-{{.Use}} [data-gobra-select]").forEach( option
 });
 
 // Compile query when Execute is clicked
-button.onclick = e => {
+execBtn.onclick = e => {
 	let recurse = el => {
 		let cmds = [],
 			flags = [];
@@ -143,33 +165,42 @@ button.onclick = e => {
 	}
 	let resultCmd = recurse(document.getElementById("gobra-{{.Use}}"));
 
-	button.setAttribute("disabled", "disabled");
-	status.textContent = "→ "+resultCmd.reduce((x,y) => {
+	execBtn.setAttribute("disabled", "disabled");
+	clearLogger(logger);
+	printData(logger, "→ "+resultCmd.reduce((x,y) => {
 			return x.join(" ") + " "
 				+ y.map(z =>
 					"--"+z.split("=")[0]+"=\""+z.split("=")[1]+"\""
 				).join(" ")
-		})+"\n" ;
-	status.scrollTop = status.scrollHeight;
+		})+ "\n");
 
 	serverSend(resultCmd[0], resultCmd[1])
 		.then(res => res.text()).then( d => {
-			status.textContent += "← " + d + "\n";
-			status.scrollTop = status.scrollHeight;
-			button.removeAttribute("disabled");
+			printData(logger,"← " + d + "\n");
+			execBtn.removeAttribute("disabled");
 		})
 		.catch(e => {
-			status.textContent += "⤬ Failed communicating with server: " + e + "\n";
-			status.scrollTop = status.scrollHeight;
-			button.removeAttribute("disabled");
+			printData(logger,"⤬ Failed communicating with server: " + e + "\n");
+			execBtn.removeAttribute("disabled");
 		});
 }
 {{ end }}
-const serverAddress = {{ if .ServerAddress}} {{ .ServerAddress }} {{ else }} "/" {{ end }};
-let serverSend = (cmds, flags) => {
-	return fetch("http://"+serverAddress+"/"+cmds.join("/")+"?"+flags.join("&"));
+
+window.onload = () => {
+	let sock = new WebSocket("ws://" + serverAddress + "/ws");
+
+	sock.onopen = () => {
+		printData(logger, "* Connected.");
+	}
+
+	sock.onclose = (e) => {
+		printData(logger, "* Connection Closed. ", e.reason);
+	}
+
+	sock.onmessage = (e) => {
+		printData(logger, e.data)
+	}
 }
-})();
 </script>
 </div>
 `
@@ -206,6 +237,17 @@ type Server struct {
 	// HTML is an HTML template.
 	// If this is not nil, it will be served as an HTML front end.
 	HTML *template.Template
+
+	// socketChannel is a channel to the websocket handler.
+	// Whatever gets sent to this channel will be sent by the websocket.
+	socketChannel chan string
+}
+
+// Write method makes Server implements io.Writer.
+// It also transforms the input bytes to string then sends it to the websocket.
+func (s *Server) Write(p []byte) (n int, err error) {
+	s.socketChannel <- fmt.Sprintf("%s", p)
+	return len(p), nil
 }
 
 func (s *Server) handler(w http.ResponseWriter, r *http.Request) {
@@ -226,9 +268,9 @@ func (s *Server) handler(w http.ResponseWriter, r *http.Request) {
 		cmds := strings.Split(r.URL.Path[1:], "/")
 		flags := r.Form
 
-		var out bytes.Buffer
+		// Set cobra output to send to out
 		s.Root.SetArgs(cmds[1:])
-		s.Root.SetOutput(&out)
+		s.Root.SetOutput(s)
 
 		// Getting the command we need to set flags
 		c, _, _ := s.Root.Find(cmds[1:])
@@ -238,7 +280,7 @@ func (s *Server) handler(w http.ResponseWriter, r *http.Request) {
 
 		fmt.Println("Executing: ", cmds, flags)
 		s.Root.ExecuteC()
-		fmt.Fprintf(w, out.String())
+		fmt.Fprintf(w, "Finished. ")
 
 	} else {
 		// Everything else gets a 404
@@ -247,8 +289,22 @@ func (s *Server) handler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (s *Server) wsHandler(ws *websocket.Conn) {
+	for {
+		// Receiving data from channel
+		data := <-s.socketChannel
+		if err := websocket.Message.Send(ws, data); err != nil {
+			fmt.Println("Error sending data.")
+			break
+		}
+	}
+}
+
 // Start starts the server.
 func (s *Server) Start() {
+	s.socketChannel = make(chan string)
+
 	http.HandleFunc("/", s.handler)
+	http.Handle("/ws", websocket.Handler(s.wsHandler))
 	fmt.Println(http.ListenAndServe(s.ServerAddress, nil))
 }

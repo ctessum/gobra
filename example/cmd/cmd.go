@@ -3,6 +3,8 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"time"
+
 	"github.com/spf13/cobra"
 )
 
@@ -78,7 +80,11 @@ var runCmd = &cobra.Command{
 	Long:              `run runs program and executes it.`,
 	DisableAutoGenTag: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		cmd.Println("Running program & stuff")
+		cmd.Println("Running program the program.")
+		for i := range make([]int, 10) {
+			cmd.Printf("Output: %d\n", i)
+			time.Sleep(time.Duration(200) * time.Millisecond)
+		}
 		return nil
 	},
 }
