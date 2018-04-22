@@ -63,3 +63,7 @@ If the command you want to run is: `app math add --num1=3 --num2=6`
 
 You would want to make a GET request to: `//<serverAddress>/app/math/add?num1=3&num2=6`
 
+In case you'd like to upload a file to the server, the endpoint `/upload` is for this purpose. Send a POST request with the file under the field `data`, and it'll return you with a JSON including the local filepath under `path`.
+
+Your cobra Flag must contain "\[allow upload\]" at the end of its Usage field for the web interface to enable a file upload field
+
