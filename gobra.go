@@ -28,10 +28,13 @@ package gobra
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"io"
+	"io/ioutil"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -46,10 +49,17 @@ type CommandFromCobra struct {
 var tCmd *template.Template
 
 // flagSetToSlice converts pflag.FlagSet to slices for iteration
-func flagSetToSlice(fl *pflag.FlagSet) []*pflag.Flag {
+// It also combines two flagsets.
+func flagSetToSlice(fl *pflag.FlagSet, fl2 *pflag.FlagSet) []*pflag.Flag {
 	var out []*pflag.Flag
 
 	fl.VisitAll(func(f *pflag.Flag) {
+		if f.Name != "help" {
+			out = append(out, f)
+		}
+	})
+
+	fl2.VisitAll(func(f *pflag.Flag) {
 		if f.Name != "help" {
 			out = append(out, f)
 		}
@@ -58,10 +68,11 @@ func flagSetToSlice(fl *pflag.FlagSet) []*pflag.Flag {
 }
 
 func notHelpCommand(use string) bool {
-	if use != "help [command]" {
-		return true
-	}
-	return false
+	return use != "help [command]"
+}
+
+func canUploadFile(use string) bool {
+	return strings.HasSuffix(use, "[allow upload]")
 }
 
 func init() {
@@ -69,6 +80,7 @@ func init() {
 	var funcMaps = template.FuncMap{
 		"flagSetToSlice": flagSetToSlice,
 		"notHelpCommand": notHelpCommand,
+		"canUploadFile":  canUploadFile,
 	}
 
 	const commandTpl = `
@@ -78,18 +90,21 @@ func init() {
 		<h3>{{.Use}}</h3>
 		<p>{{.Long}}</p>
 		<ul class="flags">
-			{{ range (flagSetToSlice .PersistentFlags) }}
-				<li><code data-name={{ .Name }}>--{{ .Name }}=<input value={{ .Value.String }}></input></code><br><blockquote>{{ .Usage }} </blockquote></li>
-			{{ end }}
-			{{ range (flagSetToSlice .LocalNonPersistentFlags) }}
-				<li><code data-name={{ .Name }}>--{{ .Name }}=<input value={{ .Value.String }}></input></code><br><blockquote>{{ .Usage }} </blockquote></li>
+			{{ range (flagSetToSlice .PersistentFlags .LocalNonPersistentFlags) }}
+				<li><code data-name={{ .Name }}>--{{ .Name }}=<input type="text" value={{ .Value.String }}></input>
+					{{ if (canUploadFile .Usage) }} 
+						<input type="file" name="{{ .Name }}">
+					{{ end }}
+					</code><br>
+					<blockquote>{{ .Usage }}</blockquote>
+				</li>
 			{{ end }}
 		</ul>
 		{{ if .HasSubCommands }}
 			<select data-gobra-select>
 				<option selected disabled>Select</option>
 				{{ range .Commands }}
-				{{ if (notHelpCommand .Use ) }}<option value="{{.Use}}">{{ .Use }}</option>{{ end }}
+				{{ if (notHelpCommand .Use) }}<option value="{{.Use}}">{{ .Use }}</option>{{ end }}
 				{{ end }}
 			</select>
 			{{range .Commands }}
@@ -98,6 +113,7 @@ func init() {
 		{{ end }}
 	</div>
 {{ end }}
+
 {{ template "command" .Root }}
 <br/>
 <button>Execute</button>
@@ -106,7 +122,7 @@ func init() {
 </pre>
 
 <script>
-const serverAddress = {{ if .ServerAddress}} {{ .ServerAddress }} {{ else }} "/" {{ end }};
+const serverAddress = {{ if .ServerAddress}} "{{ .ServerAddress }}" {{ else }} "" {{ end }};
 
 {{ with .Root }}
 const logger = document.querySelector("#gobra-{{.Use}} .gobraStatus");
@@ -131,58 +147,102 @@ const serverSend = (cmds, flags) => {
 }
 
 // When an option is chosen, display the correct sub-command.
-document.querySelectorAll("#gobra-{{.Use}} [data-gobra-select]").forEach( option => {
-	option.onchange = e => {
-		[...e.target.parentElement.children].forEach( el => {
-			if (el.tagName == "DIV")
-				el.style.display = (el.dataset.gobraName == e.target.value)? "" : "none";
-		})
-	}
-});
+document.querySelectorAll("#gobra-{{.Use}} [data-gobra-select]").forEach( option => 
+	option.onchange = e => 
+		[...e.target.parentElement.children].forEach( el =>
+			el.tagName != "DIV"? 1 : 
+				el.style.display = el.dataset.gobraName == e.target.value? "" : "none"
+		)
+);
 
 // Compile query when Execute is clicked
 execBtn.onclick = e => {
-	let recurse = el => {
-		let cmds = [],
-			flags = [];
-		if (el.tagName = "DIV" && el.style.display !== "none") {
-			if (el.dataset.gobraName) {
-				cmds.push(el.dataset.gobraName);
-				[...el.querySelector("ul.flags").querySelectorAll("code")].forEach(f => {
-					if(f.children[0]) flags.push(f.dataset.name + "=" + encodeURIComponent(f.children[0].value));
-				})
-			}
-			[...el.children].forEach( child => {
-				if (child.style.display !== "none") {
-					let childRes = recurse(child);
-					Array.prototype.push.apply(cmds, childRes[0]);
-					Array.prototype.push.apply(flags, childRes[1]);
-					return;
-				}
-			})
-		}
-		return [cmds, flags];
-	}
-	let resultCmd = recurse(document.getElementById("gobra-{{.Use}}"));
-
 	execBtn.setAttribute("disabled", "disabled");
 	clearLogger(logger);
-	printData(logger, "→ "+resultCmd.reduce((x,y) => {
-			return x.join(" ") + " "
-				+ y.map(z =>
-					"--"+z.split("=")[0]+"=\""+z.split("=")[1]+"\""
-				).join(" ")
-		})+ "\n");
 
-	serverSend(resultCmd[0], resultCmd[1])
-		.then(res => res.text()).then( d => {
-			printData(logger,"← " + d + "\n");
-			execBtn.removeAttribute("disabled");
+	// find file inputs and upload them
+	let promisesOfFiles = [];
+	let files = document.querySelectorAll("#gobra-{{.Use}} input[type^=f]");
+
+
+	for (const file of files) {
+
+		if (file.files.length === 0) continue;
+
+		let formData = new FormData();
+		let flagName = file.parentElement.dataset.name;
+		formData.append("data", file.files[0]);
+
+		let request = fetch("http://" + serverAddress + "/upload", {
+			method: "POST",
+			body: formData
 		})
-		.catch(e => {
-			printData(logger,"⤬ Failed communicating with server: " + e + "\n");
-			execBtn.removeAttribute("disabled");
-		});
+		.catch(err => {
+			return Promise.reject("Failed uploading: " + err + "\n");
+		})
+		.then(res => res.json())
+		.then(res => {
+			file.previousElementSibling.value = res.path;
+		})
+		.catch(err => {
+			return Promise.reject("Failed processing file: " + err + "\n");
+		})
+
+		promisesOfFiles.push(request);
+	}
+
+	// wait for all files to finish uploaded before moving executing command
+	Promise.all(promisesOfFiles)
+	.then( () => {
+		// recurse through page to populate commands and flags
+		let recurse = el => {
+			let cmds = [],
+				flags = [];
+			if (el.tagName = "DIV" && el.style.display !== "none") {
+				if (el.dataset.gobraName) {
+					cmds.push(el.dataset.gobraName);
+					[...el.querySelector("ul.flags").querySelectorAll("code")].forEach(f => {
+						if(f.children[0]) flags.push(f.dataset.name + "=" + encodeURIComponent(f.children[0].value));
+					})
+				}
+				[...el.children].forEach( child => {
+					if (child.style.display !== "none") {
+						let childRes = recurse(child);
+						Array.prototype.push.apply(cmds, childRes[0]);
+						Array.prototype.push.apply(flags, childRes[1]);
+						return;
+					}
+				})
+			}
+			return [cmds, flags];
+		}
+		let resultCmd = recurse(document.getElementById("gobra-{{.Use}}"));
+
+
+		printData(logger, "→ "+resultCmd.reduce((x,y) => {
+				return x.join(" ") + " "
+					+ y.map(z =>
+						"--" + z.split("=")[0] + "=\"" + decodeURIComponent(z.split("=")[1]) + "\""
+					).join(" ")
+			})+ "\n");
+
+		serverSend(resultCmd[0], resultCmd[1])
+			.then(res => res.text()).then( d => {
+				printData(logger,"← " + d + "\n");
+				execBtn.removeAttribute("disabled");
+			})
+			.catch(e => {
+				printData(logger,"⤬ Failed communicating with server: " + e + "\n");
+				execBtn.removeAttribute("disabled");
+			});
+	})
+	.catch( err => {
+		printData(logger, "⤬ Failed data uploading, command not executed. " + err);
+
+	})
+
+	// re-enable
+	execBtn.removeAttribute("disabled");
 }
 {{ end }}
 
@@ -241,6 +301,9 @@ type Server struct {
 	// socketChannel is a channel to the websocket handler.
 	// Whatever gets sent to this channel will be sent by the websocket.
 	socketChannel chan string
+
+	// tempFolder used throughout the lifespan of the Server
+	tempDir string
 }
 
 // Write method makes Server implements io.Writer.
@@ -258,8 +321,10 @@ func (s *Server) handler(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, err.Error(), 500)
 			}
 		}
-	} else if strings.HasPrefix(r.URL.Path, "/"+s.Root.Use) {
+
+	} else if strings.HasPrefix(r.URL.Path, "/"+s.Root.Name()) {
 		// Serves API if path starts with root command name
+
 		if s.AllowCORS {
 			w.Header().Set("Access-Control-Allow-Origin", "*")
 		}
@@ -268,7 +333,8 @@ func (s *Server) handler(w http.ResponseWriter, r *http.Request) {
 		cmds := strings.Split(r.URL.Path[1:], "/")
 		flags := r.Form
 
-		// Set cobra output to send to out
+		// Set arguments to run.
+		// Set cobra output to send to server instead.
 		s.Root.SetArgs(cmds[1:])
 		s.Root.SetOutput(s)
 
@@ -281,6 +347,37 @@ func (s *Server) handler(w http.ResponseWriter, r *http.Request) {
 		fmt.Println("Executing: ", cmds, flags)
 		s.Root.ExecuteC()
 		fmt.Fprintf(w, "Finished. ")
+
+	} else if strings.HasPrefix(r.URL.Path, "/upload") {
+		// API end-point for file uploading
+		// Store uploaded files to temporary folder.
+
+		r.ParseMultipartForm(1024) // only 1kb in memory, the rest in disk
+
+		file, handler, err := r.FormFile("data")
+
+		if err != nil {
+			w.WriteHeader(500)
+			fmt.Fprintf(w, "Failed retrieving uploaded file")
+			return
+		}
+
+		localPath := s.tempDir + "/" + handler.Filename
+
+		f, err := os.OpenFile(localPath, os.O_WRONLY|os.O_CREATE, 0660) // wr for owner/group only
+		defer f.Close()
+		io.Copy(f, file)
+
+		if err != nil {
+			w.WriteHeader(500)
+			fmt.Fprintf(w, "Failed opening/copying file.")
+			return
+		}
+
+		response, _ := json.Marshal(map[string]string{
+			"path": localPath,
+		})
+		fmt.Fprintf(w, string(response))
 
 	} else {
 		// Everything else gets a 404
@@ -303,6 +400,8 @@ func (s *Server) wsHandler(ws *websocket.Conn) {
 // Start starts the server.
 func (s *Server) Start() {
 	s.socketChannel = make(chan string)
+	tempDir, _ := ioutil.TempDir("", "gobra")
+	s.tempDir = tempDir
 
 	http.HandleFunc("/", s.handler)
 	http.Handle("/ws", websocket.Handler(s.wsHandler))

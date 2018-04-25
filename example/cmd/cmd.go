@@ -3,6 +3,7 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -24,6 +25,10 @@ var (
 
 	// addition flags
 	num1, num2 int
+
+	// paths of file to print, measure
+	path string
+	path2 string
 )
 
 func init() {
@@ -32,6 +37,7 @@ func init() {
 	Root.AddCommand(runCmd)
 	runCmd.AddCommand(steadyCmd)
 	runCmd.AddCommand(addition)
+	runCmd.AddCommand(printCmd)
 
 	// Create the configuration flags.
 	Root.PersistentFlags().StringVar(&configFile, "config", "./conf.toml", "configuration file location")
@@ -41,6 +47,8 @@ func init() {
 	steadyCmd.Flags().IntVar(&begin, "begin", 0, "Beginning row index.")
 	addition.Flags().IntVar(&num1, "num1", 1, "First number")
 	addition.Flags().IntVar(&num2, "num2", 1, "Second number")
+	printCmd.Flags().StringVar(&path, "path", "" ,"filepath to determine length [allow upload]")
+	printCmd.Flags().StringVar(&path2, "path2", "", "file to print [allow upload]")
 
 }
 
@@ -50,8 +58,8 @@ var Root = &cobra.Command{
 	Short: "A dummy program",
 	Long:  `This is a longer description for a dummy program, which does not do anything and only exists for the purpose of being an example.`,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		fmt.Println("I must run before any subcommand runs")
-		cmd.Print("I'm always printed: ")
+		fmt.Println("I'm always printed, because I'm in PersistentPreRun. (server)")
+		cmd.Println("I'm always printed, because I'm in PersistentPreRun. (client)")
 	},
 	PreRun: func(cmd *cobra.Command, args []string) {
 		fmt.Println("Hey, run me before Run execute")
@@ -77,7 +85,7 @@ var versionCmd = &cobra.Command{
 var runCmd = &cobra.Command{
 	Use:               "run",
 	Short:             "Run the program.",
-	Long:              `run runs program and executes it.`,
+	Long:              `run runs program and executes it. If there's no subcommand, I'll count from 0 to 9.`,
 	DisableAutoGenTag: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cmd.Println("Running program the program.")
@@ -108,4 +116,21 @@ var steadyCmd = &cobra.Command{
 		return errors.New("Oh no! An error! I'm not steady")
 	},
 	DisableAutoGenTag: true,
+}
+
+// printCmd takes a file path and prints it
+var printCmd = &cobra.Command{
+	Use:   "print",
+	Short: "prints file content",
+	Long:  "Takes in a filepath and prints its content. Easy enough.",
+	Run: func(cmd *cobra.Command, args []string) {
+		b, err := ioutil.ReadFile(path) 
+		c, err := ioutil.ReadFile(path2) 
+	    if err != nil {
+	        cmd.Println(err)
+	    }
+
+	    cmd.Println("Filesize of the first file: ", len(string(b)))
+	    cmd.Println("Content of ", path2, "is: ", string(c))
+	},
 }
