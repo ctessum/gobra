@@ -27,7 +27,7 @@ var (
 	num1, num2 int
 
 	// paths of file to print, measure
-	path string
+	path  string
 	path2 string
 )
 
@@ -47,8 +47,8 @@ func init() {
 	steadyCmd.Flags().IntVar(&begin, "begin", 0, "Beginning row index.")
 	addition.Flags().IntVar(&num1, "num1", 1, "First number")
 	addition.Flags().IntVar(&num2, "num2", 1, "Second number")
-	printCmd.Flags().StringVar(&path, "path", "" ,"filepath to determine length [allow upload]")
-	printCmd.Flags().StringVar(&path2, "path2", "", "file to print [allow upload]")
+	printCmd.Flags().StringVar(&path, "path", "", "filepath to determine length")
+	printCmd.Flags().StringVar(&path2, "path2", "", "file to print")
 
 }
 
@@ -124,13 +124,13 @@ var printCmd = &cobra.Command{
 	Short: "prints file content",
 	Long:  "Takes in a filepath and prints its content. Easy enough.",
 	Run: func(cmd *cobra.Command, args []string) {
-		b, err := ioutil.ReadFile(path) 
-		c, err := ioutil.ReadFile(path2) 
-	    if err != nil {
-	        cmd.Println(err)
-	    }
+		b, err := ioutil.ReadFile(path)
+		c, err := ioutil.ReadFile(path2)
+		if err != nil {
+			cmd.Println(err)
+		}
 
-	    cmd.Println("Filesize of the first file: ", len(string(b)))
-	    cmd.Println("Content of ", path2, "is: ", string(c))
+		cmd.Println("Filesize of the first file: ", len(string(b)))
+		cmd.Println("Content of ", path2, "is: ", string(c))
 	},
 }

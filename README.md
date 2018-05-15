@@ -3,7 +3,7 @@ Gobra generates web interfaces to interact with [cobra](https://github.com/spf13
 
 ## Usage
 
-There are two parts to Gobra: generating client-side interface and serving a HTTP API. 
+There are two parts to Gobra: generating client-side interface and serving a HTTP API.
 
 ### Generating client-side HTML
 
@@ -65,5 +65,4 @@ You would want to make a GET request to: `//<serverAddress>/app/math/add?num1=3&
 
 In case you'd like to upload a file to the server, the endpoint `/upload` is for this purpose. Send a POST request with the file under the field `data`, and it'll return you with a JSON including the local filepath under `path`.
 
-Your cobra Flag must contain "\[allow upload\]" at the end of its Usage field for the web interface to enable a file upload field
-
+Your cobra Flag must be registered using `MakeFlagUploadable` for the web interface to enable a file upload field

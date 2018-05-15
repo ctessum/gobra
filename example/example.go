@@ -63,5 +63,6 @@ func main() {
 	fmt.Println("Starting server at localhost:8080")
 
 	server := gobra.Server{Root: cmd.Root, ServerAddress: "localhost:8080", AllowCORS: true, HTML: output}
+	server.MakeFlagUploadable("path", "path2")
 	server.Start()
 }

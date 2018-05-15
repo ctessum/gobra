@@ -43,12 +43,6 @@ import (
 	"golang.org/x/net/websocket"
 )
 
-// CommandFromCobra is a wrapper for cobra.Command to work with Gobra
-type CommandFromCobra struct {
-}
-
-var tCmd *template.Template
-
 // flagSetToSlice converts pflag.FlagSet to slices for iteration
 // It also combines two flagsets.
 func flagSetToSlice(fl *pflag.FlagSet, fl2 *pflag.FlagSet) []*pflag.Flag {
@@ -72,19 +66,12 @@ func notHelpCommand(use string) bool {
 	return use != "help [command]"
 }
 
-func canUploadFile(use string) bool {
-	return strings.HasSuffix(use, "[allow upload]")
+func (s *Server) canUploadFile(name string) bool {
+	_, ok := s.uploadableFlags[name]
+	return ok
 }
 
-func init() {
-
-	var funcMaps = template.FuncMap{
-		"flagSetToSlice": flagSetToSlice,
-		"notHelpCommand": notHelpCommand,
-		"canUploadFile":  canUploadFile,
-	}
-
-	const commandTpl = `
+const commandTpl = `
 <div id="gobra-{{.Root.Use}}">
 {{ define "command" }}
 	<div data-gobra-name={{.Use}} style="{{if .HasParent }}display:none;{{end}}">
@@ -93,7 +80,7 @@ func init() {
 		<ul class="flags">
 			{{ range (flagSetToSlice .PersistentFlags .LocalNonPersistentFlags) }}
 				<li><code data-name={{ .Name }}>--{{ .Name }}=<input type="text" value={{ .Value.String }}></input>
-					{{ if (canUploadFile .Usage) }}
+					{{ if (canUploadFile .Name) }}
 						<input type="file" name="{{ .Name }}">
 					{{ end }}
 					</code><br>
@@ -266,21 +253,18 @@ window.onload = () => {
 </div>
 `
 
-	tCmd = template.Must(template.New("commands").Funcs(funcMaps).Parse(commandTpl))
-}
-
 // Render renders the view of the command. If the HTML field of the receiver
 // is not nil, it will render the whole page, otherwise it will just render
 // the gobra section.
 func (s *Server) Render(w io.Writer) error {
 	if s.HTML != nil {
 		b := new(bytes.Buffer)
-		if err := tCmd.Execute(b, s); err != nil {
+		if err := s.tCmd.Execute(b, s); err != nil {
 			return err
 		}
 		return s.HTML.Execute(w, template.HTML(b.Bytes()))
 	}
-	return tCmd.Execute(w, s)
+	return s.tCmd.Execute(w, s)
 }
 
 // Server struct/class that holds configuration for a Cobra back-end instance
@@ -307,6 +291,23 @@ type Server struct {
 	// stored location. The default FileUploadFunc saves files in a temporary
 	// directory.
 	FileUploadFunc func(data io.Reader, name string) (filename string, err error)
+
+	tCmd *template.Template
+
+	// uploadableFlags is a set of flag names that can accept file uploads.
+	uploadableFlags map[string]struct{}
+}
+
+// MakeFlagUploadable registers the given flag name(s) as allowing file uploads.
+// Once a flag is registered, a file input will appear next to it in the
+// user interface, allowing the user to upload a file for the flag argument.
+func (s *Server) MakeFlagUploadable(names ...string) {
+	if s.uploadableFlags == nil {
+		s.uploadableFlags = make(map[string]struct{})
+	}
+	for _, name := range names {
+		s.uploadableFlags[name] = struct{}{}
+	}
 }
 
 // Write method makes Server implements io.Writer.
@@ -424,6 +425,17 @@ func (s *Server) Start() error {
 			return err
 		}
 	}
+
+	if s.uploadableFlags == nil {
+		s.uploadableFlags = make(map[string]struct{})
+	}
+	var funcMaps = template.FuncMap{
+		"flagSetToSlice": flagSetToSlice,
+		"notHelpCommand": notHelpCommand,
+		"canUploadFile":  s.canUploadFile,
+	}
+	s.tCmd = template.Must(template.New("commands").Funcs(funcMaps).Parse(commandTpl))
+
 	http.HandleFunc("/", s.handler)
 	http.Handle("/ws", websocket.Handler(s.wsHandler))
 	return http.ListenAndServe(s.ServerAddress, nil)
