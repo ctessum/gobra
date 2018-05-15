@@ -35,6 +35,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -92,7 +93,7 @@ func init() {
 		<ul class="flags">
 			{{ range (flagSetToSlice .PersistentFlags .LocalNonPersistentFlags) }}
 				<li><code data-name={{ .Name }}>--{{ .Name }}=<input type="text" value={{ .Value.String }}></input>
-					{{ if (canUploadFile .Usage) }} 
+					{{ if (canUploadFile .Usage) }}
 						<input type="file" name="{{ .Name }}">
 					{{ end }}
 					</code><br>
@@ -147,10 +148,10 @@ const serverSend = (cmds, flags) => {
 }
 
 // When an option is chosen, display the correct sub-command.
-document.querySelectorAll("#gobra-{{.Use}} [data-gobra-select]").forEach( option => 
-	option.onchange = e => 
+document.querySelectorAll("#gobra-{{.Use}} [data-gobra-select]").forEach( option =>
+	option.onchange = e =>
 		[...e.target.parentElement.children].forEach( el =>
-			el.tagName != "DIV"? 1 : 
+			el.tagName != "DIV"? 1 :
 				el.style.display = el.dataset.gobraName == e.target.value? "" : "none"
 		)
 );
@@ -302,8 +303,10 @@ type Server struct {
 	// Whatever gets sent to this channel will be sent by the websocket.
 	socketChannel chan string
 
-	// tempFolder used throughout the lifespan of the Server
-	tempDir string
+	// FileUploadFunc is a function that stores uploaded files and returns the
+	// stored location. The default FileUploadFunc saves files in a temporary
+	// directory.
+	FileUploadFunc func(data io.Reader, name string) (filename string, err error)
 }
 
 // Write method makes Server implements io.Writer.
@@ -355,19 +358,13 @@ func (s *Server) handler(w http.ResponseWriter, r *http.Request) {
 		r.ParseMultipartForm(1024) // only 1kb in memory, the rest in disk
 
 		file, handler, err := r.FormFile("data")
-
 		if err != nil {
 			w.WriteHeader(500)
 			fmt.Fprintf(w, "Failed retrieving uploaded file")
 			return
 		}
 
-		localPath := s.tempDir + "/" + handler.Filename
-
-		f, err := os.OpenFile(localPath, os.O_WRONLY|os.O_CREATE, 0660) // wr for owner/group only
-		defer f.Close()
-		io.Copy(f, file)
-
+		localPath, err := s.FileUploadFunc(file, handler.Filename)
 		if err != nil {
 			w.WriteHeader(500)
 			fmt.Fprintf(w, "Failed opening/copying file.")
@@ -386,6 +383,26 @@ func (s *Server) handler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func saveTempFileFunc() (func(io.Reader, string) (string, error), error) {
+	tempDir, err := ioutil.TempDir("", "gobra")
+	if err != nil {
+		return nil, fmt.Errorf("gobra: creating temporary directory: %v", err)
+	}
+	return func(data io.Reader, name string) (string, error) {
+		localPath := filepath.Join(tempDir, name)
+		f, err := os.OpenFile(localPath, os.O_WRONLY|os.O_CREATE, 0660) // wr for owner/group only
+		if err != nil {
+			return "", fmt.Errorf("gobra: opening uploaded file: %v", err)
+		}
+		defer f.Close()
+		_, err = io.Copy(f, data)
+		if err != nil {
+			return "", fmt.Errorf("gobra: saving uploaded file: %v", err)
+		}
+		return localPath, nil
+	}, nil
+}
+
 func (s *Server) wsHandler(ws *websocket.Conn) {
 	for {
 		// Receiving data from channel
@@ -398,12 +415,16 @@ func (s *Server) wsHandler(ws *websocket.Conn) {
 }
 
 // Start starts the server.
-func (s *Server) Start() {
+func (s *Server) Start() error {
 	s.socketChannel = make(chan string)
-	tempDir, _ := ioutil.TempDir("", "gobra")
-	s.tempDir = tempDir
-
+	if s.FileUploadFunc == nil {
+		var err error
+		s.FileUploadFunc, err = saveTempFileFunc()
+		if err != nil {
+			return err
+		}
+	}
 	http.HandleFunc("/", s.handler)
 	http.Handle("/ws", websocket.Handler(s.wsHandler))
-	fmt.Println(http.ListenAndServe(s.ServerAddress, nil))
+	return http.ListenAndServe(s.ServerAddress, nil)
 }
