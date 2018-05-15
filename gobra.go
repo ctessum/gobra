@@ -243,6 +243,7 @@ window.onload = () => {
 
 	sock.onclose = (e) => {
 		printData(logger, "* Connection Closed. ", e.reason);
+		alert("Lost connection with server");
 	}
 
 	sock.onmessage = (e) => {
