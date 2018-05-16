@@ -397,7 +397,10 @@ func (s *Server) handler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		// flagName := r.MultipartForm.Value["name"][0]
-		flagType := r.MultipartForm.Value["type"][0]
+		var flagType string
+		if t := r.MultipartForm.Value["type"]; len(t) > 0 {
+			flagType = t[0]
+		}
 		fhs := r.MultipartForm.File["data"]
 		paths := make([]string, len(fhs))
 		for i, fh := range fhs {
