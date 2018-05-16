@@ -81,7 +81,7 @@ const commandTpl = `
 			{{ range (flagSetToSlice .PersistentFlags .LocalNonPersistentFlags) }}
 				<li><code data-name={{ .Name }}>--{{ .Name }}=<input type="text" value={{ .Value.String }}></input>
 					{{ if (canUploadFile .Name) }}
-						<input type="file" name="{{ .Name }}">
+						<input type="file" name="{{ .Name }}" multiple>
 					{{ end }}
 					</code><br>
 					<blockquote>{{ .Usage }}</blockquote>
@@ -167,7 +167,9 @@ execBtn.onclick = e => {
 
 		let formData = new FormData();
 		let flagName = file.parentElement.dataset.name;
-		formData.append("data", file.files[0]);
+		for (const fileData of file.files) {
+			formData.append("data", fileData);
+		}
 
 		let request = fetch("http://" + serverAddress + "/upload", {
 			method: "POST",
@@ -367,25 +369,45 @@ func (s *Server) handler(w http.ResponseWriter, r *http.Request) {
 		// API end-point for file uploading
 		// Store uploaded files to temporary folder.
 
-		r.ParseMultipartForm(1024) // only 1kb in memory, the rest in disk
-
-		file, handler, err := r.FormFile("data")
-		if err != nil {
-			w.WriteHeader(500)
-			fmt.Fprintf(w, "Failed retrieving uploaded file")
-			return
+		r.ParseMultipartForm(32 << 20) // 32MB is held in memory.
+		fhs := r.MultipartForm.File["data"]
+		paths := make([]string, len(fhs))
+		for i, fh := range fhs {
+			file, err := fh.Open()
+			if err != nil {
+				w.WriteHeader(500)
+				fmt.Fprintf(w, "failed retrieving uploaded file: %v", err)
+				return
+			}
+			localPath, err := s.FileUploadFunc(file, fh.Filename)
+			if err != nil {
+				w.WriteHeader(500)
+				fmt.Fprintf(w, "failed opening/copying file: %v", err)
+				return
+			}
+			paths[i] = localPath
 		}
 
-		localPath, err := s.FileUploadFunc(file, handler.Filename)
-		if err != nil {
-			w.WriteHeader(500)
-			fmt.Fprintf(w, "Failed opening/copying file.")
-			return
+		var pathResponse []byte
+		if len(paths) == 1 {
+			pathResponse = []byte(paths[0])
+		} else if len(paths) > 1 {
+			var err error
+			pathResponse, err = json.Marshal(paths)
+			if err != nil {
+				w.WriteHeader(500)
+				fmt.Fprintf(w, err.Error())
+				return
+			}
 		}
-
-		response, _ := json.Marshal(map[string]string{
-			"path": localPath,
+		response, err := json.Marshal(map[string]string{
+			"path": string(pathResponse),
 		})
+		if err != nil {
+			w.WriteHeader(500)
+			fmt.Fprintf(w, "failed opening/copying file: %v", err)
+			return
+		}
 		fmt.Fprintf(w, string(response))
 
 	} else {
