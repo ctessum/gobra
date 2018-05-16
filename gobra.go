@@ -143,6 +143,13 @@ document.querySelectorAll("#gobra-{{.Use}} [data-gobra-select]").forEach( option
 		)
 );
 
+let files = document.querySelectorAll("#gobra-{{.Use}} input[type^=f]");
+for (const file of files) {
+	file.addEventListener("change", e => {
+		file.previousElementSibling.value = "";
+	})
+}
+
 // Compile query when Execute is clicked
 execBtn.onclick = e => {
 	execBtn.setAttribute("disabled", "disabled");
