@@ -44,20 +44,31 @@ import (
 	"golang.org/x/net/websocket"
 )
 
+type flagType struct {
+	*pflag.Flag
+	Type string
+}
+
 // flagSetToSlice converts pflag.FlagSet to slices for iteration
 // It also combines two flagsets.
-func flagSetToSlice(fl *pflag.FlagSet, fl2 *pflag.FlagSet) []*pflag.Flag {
-	var out []*pflag.Flag
+func flagSetToSlice(fl *pflag.FlagSet, fl2 *pflag.FlagSet) []flagType {
+	var out []flagType
 
 	fl.VisitAll(func(f *pflag.Flag) {
 		if f.Name != "help" {
-			out = append(out, f)
+			out = append(out, flagType{
+				Flag: f,
+				Type: f.Value.Type(),
+			})
 		}
 	})
 
 	fl2.VisitAll(func(f *pflag.Flag) {
 		if f.Name != "help" {
-			out = append(out, f)
+			out = append(out, flagType{
+				Flag: f,
+				Type: f.Value.Type(),
+			})
 		}
 	})
 	return out
@@ -80,9 +91,9 @@ const commandTpl = `
 		<p>{{.Long}}</p>
 		<ul class="flags">
 			{{ range (flagSetToSlice .PersistentFlags .LocalNonPersistentFlags) }}
-				<li><code data-name={{ .Name }}>--{{ .Name }}=<input type="text" value={{ .Value.String }}></input>
+				<li><code data-name={{ .Name }} data-type={{.Type}}>--{{ .Name }}=<input type="text" value={{ .Value.String }}></input>
 					{{ if (canUploadFile .Name) }}
-						<input type="file" name="{{ .Name }}" multiple>
+						<input type="file" name="{{ .Name }}" {{ if (isStringSlice .Type) }}multiple{{ end }}>
 					{{ end }}
 					</code><br>
 					<blockquote>{{ .Usage }}</blockquote>
@@ -167,7 +178,8 @@ execBtn.onclick = e => {
 		if (file.files.length === 0) continue;
 
 		let formData = new FormData();
-		let flagName = file.parentElement.dataset.name;
+		formData.set("name", file.parentElement.dataset.name);
+		formData.set("type", file.parentElement.dataset.type);
 		for (const fileData of file.files) {
 			formData.append("data", fileData);
 		}
@@ -384,6 +396,8 @@ func (s *Server) handler(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, fmt.Sprintf("while parsing upload form: %v", err), http.StatusInternalServerError)
 			return
 		}
+		// flagName := r.MultipartForm.Value["name"][0]
+		flagType := r.MultipartForm.Value["type"][0]
 		fhs := r.MultipartForm.File["data"]
 		paths := make([]string, len(fhs))
 		for i, fh := range fhs {
@@ -401,15 +415,15 @@ func (s *Server) handler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		var pathResponse []byte
-		if len(paths) == 1 {
-			pathResponse = []byte(paths[0])
-		} else if len(paths) > 1 {
+		if flagType == "stringSlice" {
 			var err error
 			pathResponse, err = writeAsCSV(paths)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
+		} else {
+			pathResponse = []byte(paths[0])
 		}
 		response, err := json.Marshal(map[string]string{
 			"path": string(pathResponse),
@@ -426,7 +440,7 @@ func (s *Server) handler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// This is github.com/spf13/pflag for string slice flags.
+// This is from github.com/spf13/pflag for string slice flags.
 func writeAsCSV(vals []string) ([]byte, error) {
 	b := &bytes.Buffer{}
 	w := csv.NewWriter(b)
@@ -487,6 +501,7 @@ func (s *Server) Start() error {
 		"flagSetToSlice": flagSetToSlice,
 		"notHelpCommand": notHelpCommand,
 		"canUploadFile":  s.canUploadFile,
+		"isStringSlice":  func(s string) bool { return s == "stringSlice" },
 	}
 	s.tCmd = template.Must(template.New("commands").Funcs(funcMaps).Parse(commandTpl))
 
