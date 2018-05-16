@@ -374,7 +374,7 @@ func (s *Server) handler(w http.ResponseWriter, r *http.Request) {
 		// Getting the command we need to set flags
 		c, _, _ := s.Root.Find(cmds[1:])
 		for key, values := range flags {
-			if err := c.Flags().Set(key, values[0]); err != nil {
+			if err := c.Flags().Set(key, strings.Trim(values[0], "[]")); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
