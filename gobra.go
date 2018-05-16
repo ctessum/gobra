@@ -28,6 +28,7 @@ package gobra
 
 import (
 	"bytes"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"html/template"
@@ -335,7 +336,7 @@ func (s *Server) handler(w http.ResponseWriter, r *http.Request) {
 		// Serves front-end if root is requested
 		if s.HTML != nil {
 			if err := s.Render(w); err != nil {
-				http.Error(w, err.Error(), 500)
+				http.Error(w, err.Error(), http.StatusInternalServerError)
 			}
 		}
 
@@ -346,7 +347,10 @@ func (s *Server) handler(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Access-Control-Allow-Origin", "*")
 		}
 
-		r.ParseForm()
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 		cmds := strings.Split(r.URL.Path[1:], "/")
 		flags := r.Form
 
@@ -358,31 +362,39 @@ func (s *Server) handler(w http.ResponseWriter, r *http.Request) {
 		// Getting the command we need to set flags
 		c, _, _ := s.Root.Find(cmds[1:])
 		for key, values := range flags {
-			c.Flags().Set(key, values[0])
+			if err := c.Flags().Set(key, values[0]); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
 		}
 
 		fmt.Println("Executing: ", cmds, flags)
-		s.Root.ExecuteC()
+		_, err := s.Root.ExecuteC()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 		fmt.Fprintf(w, "Finished. ")
 
 	} else if strings.HasPrefix(r.URL.Path, "/upload") {
 		// API end-point for file uploading
 		// Store uploaded files to temporary folder.
 
-		r.ParseMultipartForm(32 << 20) // 32MB is held in memory.
+		if err := r.ParseMultipartForm(32 << 20); err != nil { // 32MB is held in memory.
+			http.Error(w, fmt.Sprintf("while parsing upload form: %v", err), http.StatusInternalServerError)
+			return
+		}
 		fhs := r.MultipartForm.File["data"]
 		paths := make([]string, len(fhs))
 		for i, fh := range fhs {
 			file, err := fh.Open()
 			if err != nil {
-				w.WriteHeader(500)
-				fmt.Fprintf(w, "failed retrieving uploaded file: %v", err)
+				http.Error(w, fmt.Sprintf("failed retrieving uploaded file: %v", err), http.StatusInternalServerError)
 				return
 			}
 			localPath, err := s.FileUploadFunc(file, fh.Filename)
 			if err != nil {
-				w.WriteHeader(500)
-				fmt.Fprintf(w, "failed opening/copying file: %v", err)
+				http.Error(w, fmt.Sprintf("failed opening/copying uploaded file: %v", err), http.StatusInternalServerError)
 				return
 			}
 			paths[i] = localPath
@@ -393,10 +405,9 @@ func (s *Server) handler(w http.ResponseWriter, r *http.Request) {
 			pathResponse = []byte(paths[0])
 		} else if len(paths) > 1 {
 			var err error
-			pathResponse, err = json.Marshal(paths)
+			pathResponse, err = writeAsCSV(paths)
 			if err != nil {
-				w.WriteHeader(500)
-				fmt.Fprintf(w, err.Error())
+				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
 		}
@@ -404,17 +415,27 @@ func (s *Server) handler(w http.ResponseWriter, r *http.Request) {
 			"path": string(pathResponse),
 		})
 		if err != nil {
-			w.WriteHeader(500)
-			fmt.Fprintf(w, "failed opening/copying file: %v", err)
+			http.Error(w, fmt.Sprintf("failed opening/copying uploaded file: %v", err), http.StatusInternalServerError)
 			return
 		}
 		fmt.Fprintf(w, string(response))
 
 	} else {
 		// Everything else gets a 404
-		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w, "404 Page not Found")
+		http.Error(w, "404 Page not Found", http.StatusNotFound)
 	}
+}
+
+// This is github.com/spf13/pflag for string slice flags.
+func writeAsCSV(vals []string) ([]byte, error) {
+	b := &bytes.Buffer{}
+	w := csv.NewWriter(b)
+	err := w.Write(vals)
+	if err != nil {
+		return nil, err
+	}
+	w.Flush()
+	return bytes.TrimSuffix(b.Bytes(), []byte("\n")), nil
 }
 
 func saveTempFileFunc() (func(io.Reader, string) (string, error), error) {

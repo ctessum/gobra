@@ -29,6 +29,7 @@ var (
 	// paths of file to print, measure
 	path  string
 	path2 string
+	path3 []string
 )
 
 func init() {
@@ -38,6 +39,7 @@ func init() {
 	runCmd.AddCommand(steadyCmd)
 	runCmd.AddCommand(addition)
 	runCmd.AddCommand(printCmd)
+	runCmd.AddCommand(printMultipleCmd)
 
 	// Create the configuration flags.
 	Root.PersistentFlags().StringVar(&configFile, "config", "./conf.toml", "configuration file location")
@@ -49,6 +51,7 @@ func init() {
 	addition.Flags().IntVar(&num2, "num2", 1, "Second number")
 	printCmd.Flags().StringVar(&path, "path", "", "filepath to determine length")
 	printCmd.Flags().StringVar(&path2, "path2", "", "file to print")
+	printMultipleCmd.Flags().StringSliceVar(&path3, "path3", []string{""}, "files to print")
 
 }
 
@@ -132,5 +135,21 @@ var printCmd = &cobra.Command{
 
 		cmd.Println("Filesize of the first file: ", len(string(b)))
 		cmd.Println("Content of ", path2, "is: ", string(c))
+	},
+}
+
+// printCmd takes multiple files and prints them.
+var printMultipleCmd = &cobra.Command{
+	Use:   "multiprint",
+	Short: "prints content of multiple files",
+	Long:  "Takes in files and prints their contents.",
+	Run: func(cmd *cobra.Command, args []string) {
+		for i, path := range path3 {
+			data, err := ioutil.ReadFile(path)
+			if err != nil {
+				cmd.Println(err)
+			}
+			cmd.Printf("Content of file %d (%s) is:\n\n%s\n\n", i, path, string(data))
+		}
 	},
 }
