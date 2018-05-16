@@ -147,6 +147,7 @@ let files = document.querySelectorAll("#gobra-{{.Use}} input[type^=f]");
 for (const file of files) {
 	file.addEventListener("change", e => {
 		file.previousElementSibling.value = "";
+		file.previousElementSibling.disabled = true;
 	})
 }
 
@@ -178,6 +179,8 @@ execBtn.onclick = e => {
 		.then(res => res.json())
 		.then(res => {
 			file.previousElementSibling.value = res.path;
+			file.previousElementSibling.disabled = false;
+			file.value= '';
 		})
 		.catch(err => {
 			return Promise.reject("Failed processing file: " + err + "\n");
