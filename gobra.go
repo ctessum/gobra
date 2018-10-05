@@ -35,6 +35,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -322,6 +323,10 @@ type Server struct {
 
 	// uploadableFlags is a set of flag names that can accept file uploads.
 	uploadableFlags map[string]struct{}
+
+	// PreRun, if not nil, will be run before executing the given commands with
+	// the given flags.
+	PreRun func(commands *[]string, flags *url.Values) error
 }
 
 // MakeFlagUploadable registers the given flag name(s) as allowing file uploads.
@@ -365,6 +370,11 @@ func (s *Server) handler(w http.ResponseWriter, r *http.Request) {
 		}
 		cmds := strings.Split(r.URL.Path[1:], "/")
 		flags := r.Form
+
+		if err := s.PreRun(&cmds, &flags); err != nil {
+			http.Error(w, "running pre-run hook: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
 
 		// Set arguments to run.
 		// Set cobra output to send to server instead.
